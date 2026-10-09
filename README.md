@@ -31,19 +31,21 @@ Depuis un téléphone sur le même réseau Wi-Fi, ouvrez `http://<adresse-du-mac
 | `npm run seed` | Ajoute des guerriers fictifs |
 | `npm run battle:now` | Avance la prochaine bataille de territoires à maintenant |
 | `npm run build` | Construit le client pour la production |
+| `npx tsx tools/balance.ts` | Simulation d'équilibrage du niveau 1 au niveau 100 |
 
 ## Ce qui est en place
 
 - **Comptes et personnage** : choix de la faction (bonus d'or pour la moins peuplée), du portrait, protection de débutant de 72 h.
+- **Progression jusqu'au niveau 100** : courbe d'expérience quadratique, pensée pour qu'un joueur régulier atteigne le niveau 50 en 4 mois environ et le niveau 100 en un an et demi. Les objets, ennemis, travaux et récompenses grandissent tous avec les mêmes formules (`shared/src/balance.ts`). `npx tsx tools/balance.ts` rejoue la simulation et affiche ce que rapportent travail, patrouille et pillage à chaque niveau.
 - **Caractéristiques** : 4 attributs (Force, Agilité, Vigueur, Esprit) et 12 compétences. Chaque attribut s'ajoute aux trois compétences qui en dépendent. Points à répartir à chaque niveau, plus un maître d'armes qui vend des points contre de l'or (de plus en plus cher).
 - **Trois profils de combat** calculés à partir des compétences et de l'équipement, comme dans les jeux de duel : on ne se bat pas avec les mêmes qualités en **attaque** (précision, charge, intimidation, embuscade), en **défense** (fortification, tactique, esquive) et en **bataille** rangée (commandement, tactique).
 - **Énergie** : 10 points, 1 point toutes les 72 minutes de jeu. Patrouilles, pillages et duels en coûtent un.
-- **Travail** : 10 métiers débloqués par les compétences, de 15 min à 8 h, payés davantage quand on dépasse le minimum requis et quand sa faction tient des territoires.
-- **Patrouilles** : 7 ennemis du loup affamé au champion des ruines, avec butin possible.
+- **Travail** : 20 métiers débloqués par les compétences, de 15 min à 8 h, payés davantage quand on dépasse le minimum requis et quand sa faction tient des territoires.
+- **Patrouilles** : 20 ennemis, du loup affamé (niveau 1) au seigneur des ruines (niveau 100), avec butin possible.
 - **Pillage** : marche de 10 minutes, combat attaque contre défense, jusqu'à 10 % de l'or exposé (le coffre protège 50 or par niveau), protection d'une heure pour la victime. L'assaillant vaincu paie 5 % de son or.
 - **Duels** : combat immédiat, sans vol, pour l'honneur et l'expérience.
 - **Honneur** : vaincre plus fort que soi est glorieux, s'en prendre aux faibles ou aux blessés est déshonorant, tenir bon en défense rapporte de l'honneur. Sous -100, on devient **hors-la-loi** : n'importe qui, même de sa faction, peut vous attaquer, votre tête est mise à prix et les marchands vous font payer plus cher. Les gens honorables ont des remises.
-- **Équipement** : 6 emplacements, 31 objets en 4 raretés, objets propres à chaque faction, objets légendaires trouvés uniquement en patrouille.
+- **Équipement** : 6 emplacements, 139 objets du niveau 1 au niveau 100 en 4 raretés, 40 objets propres à chaque faction, 15 objets légendaires trouvés uniquement en patrouille (dont l'ensemble d'Aldoria au niveau 100).
 - **Guerre des territoires** : 12 territoires sur la carte d'Aldoria. Chaque semaine (dimanche 20 h, heure de Paris l'été, en vitesse normale), les joueurs enrôlés s'affrontent un contre un, avec leur profil de bataille et leur équipement, dans l'ordre de leur ligne (avant-garde, corps, arrière-garde). Le vainqueur d'un duel reste en lice avec les PV qui lui restent, jusqu'à ce qu'il ne reste qu'une armée debout : elle prend le territoire. On ne peut attaquer qu'un territoire voisin des siens, et les capitales sont imprenables.
 - **Rapports** de combat détaillés round par round, rapports de bataille, classements des joueurs et des factions, notifications en direct.
 - **Mobile** : interface adaptée au téléphone avec barre de navigation en bas, installable (PWA).
