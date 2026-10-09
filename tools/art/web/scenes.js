@@ -1,7 +1,8 @@
 // Scènes : fonds, ennemis, travaux, actions. Rendues petit puis « illustrées » par pixelize.py.
-import { THREE, MAT, mesh, displace, loft, lathe, ellipse, sweep, tubeAlong, canvasTex, tex, fbm, noise3, smooth, clamp, lerp, V, deg, rng, sky, sun, envFromScene, capture } from './lib.js';
+import { THREE, MAT, mesh, displace, loft, lathe, ellipse, sweep, tubeAlong, canvasTex, tex, img, fbm, noise3, smooth, clamp, lerp, V, deg, rng, sky, sun, envFromScene, capture } from './lib.js';
 import * as M from './models.js';
 import { figure, torso } from './people.js';
+import * as A from './arsenal.js';
 
 const G = () => new THREE.Group();
 const C = (c) => new THREE.Color(c);
@@ -619,10 +620,472 @@ S.hopital = (w, h) => {
   return shoot(scene, cam(48, V(2.5, 2.4, 2.2), V(-0.5, 0.7, -4)), w, h, { exposure: 1.2 });
 };
 
+// ================================================================== lot 2 : ennemis et travaux
+// Aides : casque, arme en main, armure sur le tronc d'une silhouette de people.js (figure).
+function helmOn(f, helm, y = 0.045) { const head = f.children[3]; for (const c of [...head.children]) if (c.isGroup) head.remove(c); helm.position.y = y; head.add(helm); return f; }
+function inHand(f, obj, { rx = Math.PI / 2 + 0.3, ry = 0, rz = 0, pos = [0, 0, 0], left = false } = {}) { const arm = f.getObjectByName(left ? 'armL' : 'armR'); obj.rotation.set(rx, ry, rz); obj.position.set(...pos); arm.userData.hand.add(obj); return obj; }
+function onBody(f, obj) { f.children[1].add(obj); return obj; }
+function glowEyes(f, color = 0x7ad0ff) { const head = f.children[3]; for (const s of [-1, 1]) { const e = mesh(new THREE.SphereGeometry(0.011, 8, 6), new THREE.MeshBasicMaterial({ color: C(color).multiplyScalar(2.5), fog: false })); e.position.set(s * 0.034, 0.025, 0.118); head.add(e); } const pl = new THREE.PointLight(color, 0.06, 0.8, 2); pl.position.set(0, 0.03, 0.25); head.add(pl); }
+function fill(scene, color = 0xffd8b8, i = 1.4, pos = V(2, 3, 6)) { const l = new THREE.DirectionalLight(C(color), i); l.position.copy(pos); scene.add(l); return l; }
+function bear() {
+  const fur = MAT.fur({ color: 0x4a3222, rep: [3, 3] });
+  const b = quadruped({ len: 1.55, h: 1.15, girth: 0.6, neck: 0.42, headL: 0.36, legR: 0.12, mat: fur, hump: 0.35, neckUp: 0.3, tail: 'thin', ears: 0.08, snout: 0.8, lowHead: 0.05, color: 0x4a3222 });
+  b.traverse((o) => { if (o.isMesh && o.geometry.type === 'SphereGeometry' && o.material.color && o.material.color.getHex() === 0x080606) o.material = new THREE.MeshBasicMaterial({ color: C(0xc08030).multiplyScalar(1.2) }); });
+  return b;
+}
+function ruinTower(r, h, mat, seed = 1) {
+  const g = G(); const rr = rng(seed);
+  const t = mesh(new THREE.CylinderGeometry(r, r * 1.08, h, 24, 8, true), mat);
+  displace(t.geometry, (v) => { const a = Math.atan2(v.z, v.x); const top = h / 2 - 2.5 * Math.max(0, Math.sin(a * 2 + 1)) - 1.5 * Math.abs(noise3(a * 2, 1, 2)); return v.y > top ? V(v.x, top, v.z) : null; });
+  t.position.y = h / 2; t.material.side = THREE.DoubleSide; g.add(t);
+  for (let i = 0; i < 3; i++) { const s = mesh(new THREE.BoxGeometry(0.2, 0.9, 0.3), MAT.plain(0x120c08)); const a = i * 2.1 + 0.5; s.position.set(Math.cos(a) * r, h * (0.3 + i * 0.12), Math.sin(a) * r); s.rotation.y = -a; g.add(s); }
+  for (let i = 0; i < 8; i++) { const b = mesh(new THREE.BoxGeometry(rr.range(0.4, 0.9), rr.range(0.3, 0.6), rr.range(0.4, 0.8)), mat); b.position.set(r * 1.4 * Math.cos(i), 0.2, r * 1.4 * Math.sin(i)); b.rotation.set(rr(), rr(), rr()); g.add(b); }
+  return g;
+}
+function chest(s = 1, gold = false) {
+  const g = G(); const w = MAT.wood({ color: 0x5a3820, rep: [1, 1] }); const ir = MAT.metal({ color: 0x5a5854, rough: 0.5 });
+  const b = mesh(new THREE.BoxGeometry(0.8, 0.45, 0.5), w); b.position.y = 0.225; g.add(b);
+  const lid = mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.8, 16, 1, false, 0, Math.PI), w); lid.rotation.z = Math.PI / 2; lid.rotation.y = 0; lid.position.y = 0.45; lid.rotation.x = 0; g.add(lid); lid.rotation.set(0, 0, Math.PI / 2); lid.geometry.rotateY(Math.PI / 2);
+  for (const x of [-0.3, 0, 0.3]) { const band = mesh(new THREE.BoxGeometry(0.05, 0.47, 0.52), ir); band.position.set(x, 0.225, 0); g.add(band); }
+  const lock = mesh(new THREE.BoxGeometry(0.1, 0.12, 0.03), gold ? MAT.gold() : ir); lock.position.set(0, 0.38, 0.26); g.add(lock);
+  if (gold) { for (let i = 0; i < 14; i++) { const c = mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.008, 12), MAT.gold()); c.position.set((i % 5 - 2) * 0.12 + 0.03, 0.03, 0.35 + Math.floor(i / 5) * 0.06); c.rotation.x = 0.2 * (i % 3); g.add(c); } }
+  g.scale.setScalar(s); return g;
+}
+function wheel(r = 0.45, m = MAT.wood({ color: 0x5a3a20 })) { const g = G(); const t = mesh(new THREE.TorusGeometry(r, 0.05, 8, 24), m); g.add(t); for (let i = 0; i < 8; i++) { const sp = mesh(new THREE.CylinderGeometry(0.02, 0.02, r * 2, 6), m); sp.rotation.z = i / 8 * Math.PI; g.add(sp); } const hub = mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.15, 10), m); hub.rotation.x = Math.PI / 2; g.add(hub); return g; }
+function cart(load = null) {
+  const g = G(); const w = MAT.wood({ color: 0x6a4a2a, rep: [2, 1] });
+  const bed = mesh(new THREE.BoxGeometry(1.4, 0.12, 2.4), w); bed.position.y = 0.75; g.add(bed);
+  for (const s of [-1, 1]) { const side = mesh(new THREE.BoxGeometry(0.06, 0.35, 2.4), w); side.position.set(s * 0.7, 0.95, 0); g.add(side); const wh = wheel(); wh.rotation.y = Math.PI / 2; wh.position.set(s * 0.8, 0.45, 0); g.add(wh); const sh = mesh(new THREE.BoxGeometry(0.06, 0.06, 1.6), w); sh.position.set(s * 0.35, 0.7, 1.9); sh.rotation.x = 0.12; g.add(sh); }
+  if (load) { load.position.y = 0.81; g.add(load); }
+  return g;
+}
+function throne(mat) {
+  const g = G();
+  const seat = mesh(new THREE.BoxGeometry(1.4, 0.9, 1.1), mat); seat.position.y = 0.45; g.add(seat);
+  const back = mesh(new THREE.BoxGeometry(1.4, 2.6, 0.3), mat); back.position.set(0, 1.3, -0.55); g.add(back);
+  displace(back.geometry, (v) => v.y > 1.0 && v.x > 0.2 ? V(v.x, 1.0 - (v.x - 0.2) * 0.8, v.z) : null);
+  for (const s of [-1, 1]) { const arm = mesh(new THREE.BoxGeometry(0.22, 0.45, 1.1), mat); arm.position.set(s * 0.6, 1.12, 0); g.add(arm); }
+  const step = mesh(new THREE.BoxGeometry(2.6, 0.25, 2.2), mat); step.position.set(0, 0.0, 0.2); g.add(step);
+  return g;
+}
+function sarcophagus(mat, seed = 1) {
+  const g = G(); const b = mesh(new THREE.BoxGeometry(1.0, 0.8, 2.2), mat); b.position.y = 0.4; g.add(b);
+  const lid = mesh(new THREE.BoxGeometry(1.1, 0.16, 2.3), mat); lid.position.y = 0.88; lid.rotation.y = (seed % 3 - 1) * 0.12; g.add(lid);
+  const eff = mesh(new THREE.CapsuleGeometry(0.2, 1.2, 6, 10), mat); eff.rotation.x = Math.PI / 2; eff.scale.y = 0.6; eff.position.y = 1.0; g.add(eff);
+  return g;
+}
+function watchtower(h = 6, mat = MAT.wood({ color: 0x5a3a20, rep: [1, 4] })) {
+  const g = G();
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const p = mesh(new THREE.CylinderGeometry(0.12, 0.15, h, 8), mat); p.position.set(x * 1.1, h / 2, z * 1.1); p.rotation.set(-z * 0.04, 0, x * 0.04); g.add(p); }
+  const pl = mesh(new THREE.BoxGeometry(3, 0.15, 3), mat); pl.position.y = h - 1.2; g.add(pl);
+  for (const [x, z, ry] of [[0, 1.45, 0], [0, -1.45, 0], [1.45, 0, Math.PI / 2], [-1.45, 0, Math.PI / 2]]) { const r = mesh(new THREE.BoxGeometry(3, 0.9, 0.08), mat); r.position.set(x, h - 0.7, z); r.rotation.y = ry; g.add(r); }
+  const roof = mesh(new THREE.ConeGeometry(2.4, 1.6, 4), MAT.plain(0x4a3a24, 1, { map: tex('fur_c', [3, 3], true) })); roof.rotation.y = Math.PI / 4; roof.position.y = h + 0.9; g.add(roof);
+  for (let i = 0; i < 10; i++) { const rg = mesh(new THREE.BoxGeometry(0.6, 0.06, 0.06), mat); rg.position.set(0, 0.4 + i * 0.45, 1.45); g.add(rg); }
+  return g;
+}
+function palisade(scene, n, x0, z0, dx, dz, h = 3, seed = 1) { const r = rng(seed); const wood = MAT.wood({ color: 0x6a4a2a, rep: [1, 2] }); for (let i = 0; i < n; i++) { const hh = h + r.range(-0.2, 0.3); const p = mesh(new THREE.CylinderGeometry(0.15, 0.16, hh, 8), wood); p.position.set(x0 + i * dx, hh / 2, z0 + i * dz); scene.add(p); const tp = mesh(new THREE.ConeGeometry(0.15, 0.4, 8), wood); tp.position.set(x0 + i * dx, hh + 0.2, z0 + i * dz); scene.add(tp); } }
+function water(scene, size, y, color = 0x2a4058, pos = V(0, 0, 0)) { const w = mesh(new THREE.PlaneGeometry(size[0], size[1], 40, 40), new THREE.MeshPhysicalMaterial({ color: C(color), roughness: 0.08, metalness: 0.2, normalMap: tex('cloth_n', [20, 20]), normalScale: new THREE.Vector2(0.15, 0.15), envMapIntensity: 1.5 })); w.rotation.x = -Math.PI / 2; w.position.copy(pos); w.position.y = y; scene.add(w); return w; }
+function mapTex() {
+  return canvasTex(512, 384, (c, w, h) => {
+    c.fillStyle = '#d8c49a'; c.fillRect(0, 0, w, h); c.globalAlpha = 0.35; c.drawImage(img('cloth_c'), 0, 0, w, h); c.globalAlpha = 1;
+    const r = rng(4); c.strokeStyle = '#5a6a8a'; c.lineWidth = 4; c.beginPath(); c.moveTo(0, h * 0.6); for (let x = 0; x <= w; x += 20) c.lineTo(x, h * 0.6 + Math.sin(x / 40) * 30 + r() * 6); c.stroke();
+    c.strokeStyle = '#6a4a2a'; c.lineWidth = 2; for (let i = 0; i < 4; i++) { c.beginPath(); const cx = r() * w, cy = r() * h; for (let k = 0; k <= 12; k++) { const a = k / 12 * Math.PI * 2; c.lineTo(cx + Math.cos(a) * (50 + r() * 30), cy + Math.sin(a) * (40 + r() * 20)); } c.stroke(); }
+    for (const [x, y, col] of [[0.25, 0.3, '#c99528'], [0.7, 0.35, '#2f6a44'], [0.5, 0.75, '#3a5a8a']]) { c.fillStyle = col; c.beginPath(); c.arc(x * w, y * h, 14, 0, 7); c.fill(); }
+    c.strokeStyle = '#8a1a14'; c.lineWidth = 5; c.beginPath(); c.moveTo(w * 0.3, h * 0.35); c.quadraticCurveTo(w * 0.45, h * 0.2, w * 0.65, h * 0.33); c.stroke();
+  });
+}
+function siegeTower(h = 9) {
+  const g = G(); const w = MAT.wood({ color: 0x6a4a2a, rep: [2, 4] });
+  const b = mesh(new THREE.BoxGeometry(3, h, 3), w); b.position.y = h / 2 + 0.5; g.add(b);
+  const hide = mesh(new THREE.BoxGeometry(3.1, h * 0.85, 0.1), MAT.leather({ color: 0x7a5a3a, rep: [3, 6] })); hide.position.set(0, h * 0.45 + 0.5, 1.55); g.add(hide);
+  const ramp = mesh(new THREE.BoxGeometry(2.4, 0.12, 2.2), w); ramp.position.set(0, h + 0.2, 2.2); ramp.rotation.x = -1.1; g.add(ramp);
+  for (const s of [-1, 1]) for (const z of [-1, 1]) { const wh = wheel(0.5); wh.rotation.y = Math.PI / 2; wh.position.set(s * 1.6, 0.5, z * 1.0); g.add(wh); }
+  for (let i = 0; i < 6; i++) { const pl = mesh(new THREE.BoxGeometry(3.15, 0.1, 0.12), w); pl.position.set(0, 1 + i * h / 6, 1.62); g.add(pl); }
+  return g;
+}
+function ram() {
+  const g = G(); const w = MAT.wood({ color: 0x5a3a20, rep: [1, 3] });
+  const sh = new THREE.Shape(); sh.moveTo(-1.2, 0); sh.lineTo(0, 1.4); sh.lineTo(1.2, 0); sh.closePath();
+  const rf = new THREE.ExtrudeGeometry(sh, { depth: 4, bevelEnabled: false }); rf.translate(0, 0, -2);
+  const roof = mesh(rf, MAT.leather({ color: 0x6a4a30, rep: [3, 3] })); roof.position.y = 1.6; g.add(roof);
+  for (const s of [-1, 1]) for (const z of [-1.6, 1.6]) { const p = mesh(new THREE.BoxGeometry(0.15, 1.6, 0.15), w); p.position.set(s * 1.0, 0.8, z); g.add(p); const wh = wheel(0.4); wh.rotation.y = Math.PI / 2; wh.position.set(s * 1.15, 0.4, z); g.add(wh); }
+  const log = mesh(new THREE.CylinderGeometry(0.22, 0.25, 5, 12), w); log.rotation.x = Math.PI / 2; log.position.set(0, 1.0, 0.5); g.add(log);
+  const head = mesh(new THREE.CylinderGeometry(0.27, 0.27, 0.4, 12), MAT.metal({ color: 0x5a5854 })); head.rotation.x = Math.PI / 2; head.position.set(0, 1.0, 3.0); g.add(head);
+  return g;
+}
+function crane() {
+  const g = G(); const w = MAT.wood({ color: 0x8a6a40, rep: [1, 4] });
+  for (const s of [-1, 1]) { const l = mesh(new THREE.BoxGeometry(0.2, 7, 0.2), w); l.position.set(s * 0.9, 3.3, 0); l.rotation.z = s * 0.14; g.add(l); }
+  const boom = mesh(new THREE.BoxGeometry(0.18, 0.18, 6), w); boom.position.set(0, 6.6, 1.8); boom.rotation.x = 0.35; g.add(boom);
+  const rope = mesh(new THREE.CylinderGeometry(0.02, 0.02, 3.2, 4), MAT.plain(0xb0a080)); rope.position.set(0, 5.4, 4.4); g.add(rope);
+  const blk = mesh(new THREE.BoxGeometry(0.8, 0.5, 0.6), stoneM(0xc8b898, [1, 1])); blk.position.set(0, 3.6, 4.4); g.add(blk);
+  const wh = wheel(1.2, w); wh.position.set(0, 1.25, -0.6); g.add(wh);
+  return g;
+}
+function crows(scene, center, n, spread, seed = 3) {
+  const r = rng(seed); const m = MAT.plain(0x0a0a0c, 0.9, { side: THREE.DoubleSide });
+  for (let i = 0; i < n; i++) { const b = G(); for (const s of [-1, 1]) { const wg = mesh(new THREE.PlaneGeometry(0.5, 0.14), m); wg.position.x = s * 0.25; wg.rotation.z = s * r.range(0.2, 0.6); b.add(wg); } b.position.set(center.x + r.range(-spread, spread), center.y + r.range(0, spread * 0.4), center.z + r.range(-spread * 0.3, spread * 0.3)); b.rotation.y = r() * 3; scene.add(b); }
+}
+const royalBanner = (h = 5) => banner(0x1c2a5a, 'royal', '#e8c860', h);
+
+// ------------------------------------------------------------------ ennemis (lot 2)
+S.ours = (w, h) => {
+  const gh = (x, z) => hills(1.6, 0.05)(x, z) + Math.max(0, -z - 12) * 0.5;
+  const scene = enemyScene({ ...DUSK, top: 0x24304a, mid: 0x7a7080, horizon: 0xe8b890, sunColor: 0xffd0a0, fog: 0x8a8a98, fogD: 0.012, clouds: 0.6 }, gh, (x, z, hh, sl) => grassCol(x, z, hh, sl).lerp(C(0xd8dce4), smooth(0.2, 0.8, fbm(x * 0.12, z * 0.12, 6, 3) + 0.25 + hh * 0.08)), { sunDir: V(-0.7, 0.35, -0.4), sunI: 2.2 });
+  [[-30, -80, 30], [20, -90, 40], [55, -70, 26]].forEach(([x, z, s], i) => { const m = rock(s, 0x8a8a92, i * 3); m.scale.y = 1.6; m.position.set(x, gh(x, z) - 4, z); scene.add(m); });
+  scatter(scene, 22, (r) => conifer(r.range(6, 11), 0x1e2e24, r), (r) => { const x = r.range(-25, 25), z = r.range(-40, -8); if (Math.abs(x) < 4 && z > -16) return null; return V(x, gh(x, z), z); }, 8);
+  scatter(scene, 10, (r) => rock(r.range(0.5, 1.6), 0x8a8478, r() * 9), (r) => { const x = r.range(-8, 8), z = r.range(-12, -3); if (Math.abs(x) < 1.6 && z > -6) return null; return V(x, gh(x, z), z); }, 4);
+  const b = bear(); b.position.set(0.2, gh(0.2, -3.6), -3.6); b.rotation.y = deg(-30); scene.add(b); fill(scene, 0xd8d0d8, 1.0);
+  const c = cam(38, V(1.2, 1.0, 0.6), V(-0.3, 0.9, -5));
+  return shoot(scene, c, w, h, { grade: { vignette: 0.45 } });
+};
+S['chef-brigand'] = (w, h) => {
+  const gh = hills(1, 0.04);
+  const scene = enemyScene({ ...FOREST, sunI: 1.8, horizon: 0xc8a070, fog: 0x4a4a3a }, gh, (x, z, hh, sl) => forestFloor(x, z, hh, sl).lerp(C(0x6a5a3a), 0.3), { sunDir: V(0.6, 0.45, -0.5), amb: 0.8 });
+  const tw = ruinTower(3, 11, stoneM(0x9a8a74, [6, 4]), 2); tw.position.set(4.5, gh(4.5, -14), -14); scene.add(tw);
+  scatter(scene, 40, (r) => (r() < 0.6 ? broadleaf(r.range(7, 11), 0x2a3c1e, r) : conifer(r.range(8, 12), 0x223420, r)), (r) => { const x = r.range(-22, 22), z = r.range(-40, -6); if (Math.hypot(x - 4.5, z + 14) < 6 || (Math.abs(x) < 4 && z > -12)) return null; return V(x, gh(x, z), z); }, 4);
+  fire(scene, V(-2.5, gh(-2.5, -8), -8), 1, { light: 30 });
+  const f = figure({ faction: 'aube', variant: 2, coat: 0x6a2a1e, legs: 0x3a3024, cloakColor: 0x2a2018, beard: 1, armRot: [[-15, 12], [-35, 18]], skin: 0x9a7058 });
+  helmOn(f, A.kettleHat({ m: MAT.metal({ color: 0x6a6864, rough: 0.5 }) }), 0.06);
+  inHand(f, A.axeX({ head: 'bearded', haft: 0.8, scale: 1.3 }), { rx: Math.PI / 2 + 0.3, pos: [0, 0, 0] });
+  f.position.set(0, gh(0, -3), -3); f.rotation.y = deg(-18); scene.add(f);
+  [[-3.2, -7, 40], [-1.6, -9.5, 20]].forEach(([x, z, ry], i) => { const g = figure({ variant: i + 1, coat: [0x4a3a28, 0x3a3a2a][i], mail: false, hood: [0x2a2a20, 0x3a2e22][i], legs: 0x3a3024, beard: 0.7, spear: i === 0, skin: 0x9a7058 }); g.position.set(x, gh(x, z), z); g.rotation.y = deg(ry); scene.add(g); });
+  const c = cam(38, V(0.5, 1.5, 0.4), V(-0.3, 1.3, -6));
+  return shoot(scene, c, w, h, { exposure: 1.05 });
+};
+S.assassin = (w, h) => {
+  const gh = hills(1.8, 0.04);
+  const scene = enemyScene({ ...NIGHT, sunI: 1.6, fogD: 0.03, horizon: 0x3a4a6a }, gh, (x, z, hh, sl) => dryCol(x, z, hh, sl).multiplyScalar(0.5), { sunDir: V(0.5, 0.45, -0.7) });
+  scatter(scene, 14, (r) => (r() < 0.6 ? cypress(r.range(5, 8), r) : bush(r.range(0.8, 1.6), 0x2a3420)), (r) => { const x = r.range(-20, 20), z = r.range(-35, -6); if (Math.abs(x) < 3 && z > -10) return null; return V(x, gh(x, z), z); }, 5);
+  scatter(scene, 8, (r) => rock(r.range(0.6, 1.6), 0x6a6a70, r() * 9), (r) => { const x = r.range(-9, 9), z = r.range(-12, -4); if (Math.abs(x) < 1.5) return null; return V(x, gh(x, z), z); }, 6);
+  const f = figure({ variant: 3, coat: 0x1c1c22, mail: false, hood: 0x141418, legs: 0x18181c, beard: 0, armRot: [[-55, 22], [-70, 14]], skin: 0x8a6048, cloakColor: 0x101014 });
+  inHand(f, A.swordX({ len: 0.32, w0: 0.03, w1: 0.016, tip: 0.12, fuller: 0.4, guard: 'bar', guardLen: 0.08, gripLen: 0.09, pommelType: 'ball' }), { rx: Math.PI / 2 + 0.2 });
+  inHand(f, M.dagger(), { rx: Math.PI / 2 + 0.6, left: true });
+  // regard dans l'ombre de la capuche
+  glowEyes(f, 0xffe0a0); fill(scene, 0x8aa0d0, 0.9);
+  f.position.set(0, gh(0, -2.8), -2.8); f.rotation.y = deg(-12); scene.add(f);
+  const c = cam(38, V(0.4, 1.35, 0.5), V(-0.2, 1.3, -6));
+  return shoot(scene, c, w, h, { exposure: 1.6, grade: { vignette: 0.5 } });
+};
+S['chevalier-renegat'] = (w, h) => {
+  const gh = hills(1.2, 0.04);
+  const scene = enemyScene({ ...DUSK, top: 0x2a2030, mid: 0x7a4a40, horizon: 0xe08040, sunColor: 0xff9050, fog: 0x6a4a40, fogD: 0.015, clouds: 0.7, cloudColor: 0xc06040, cloudDark: 0x2a1a20 }, gh, (x, z, hh, sl) => dryCol(x, z, hh, sl).multiplyScalar(0.55), { sunDir: V(-0.6, 0.2, -0.7), sunI: 2.4 });
+  const r = rng(5);
+  [[-7, -16], [6, -20]].forEach(([x, z], i) => { const hs = house(5, 4, 2.6, { roofC: 0x3a2a20, wallC: 0x8a7a68 }); hs.position.set(x, gh(x, z), z); hs.rotation.y = r() * 3; scene.add(hs); fire(scene, V(x, gh(x, z) + 2.5, z), 1.8, { light: 50 }); });
+  const f = figure({ faction: 'aube', variant: 0, coat: 0x5a5650, legs: 0x2a2826, cloakColor: 0x3a1a18, armRot: [[-12, 12], [-30, 16]], beard: 0, shield: { type: 'kite', field: '#3a3a3c', emblem: 'sun', emblemColor: '#6a6458' } });
+  helmOn(f, A.greatHelm({ m: MAT.metal({ color: 0x8a8a8e, rough: 0.4 }), top: 'flat' }), 0.03);
+  inHand(f, A.swordX({ len: 0.86, w0: 0.05, w1: 0.032, tip: 0.18, guard: 'curved', guardLen: 0.2, gripLen: 0.16, pommelType: 'wheel' }));
+  f.position.set(0, gh(0, -3), -3); f.rotation.y = deg(-15); scene.add(f);
+  embers(scene, V(0, 3, -18), 50, 16); fill(scene, 0xffb080, 1.6);
+  const c = cam(38, V(0.5, 1.4, 0.4), V(-0.3, 1.35, -6));
+  return shoot(scene, c, w, h, { grade: { vignette: 0.45 } });
+};
+S['fou-de-guerre'] = (w, h) => {
+  const gh = hills(1.4, 0.05);
+  const scene = enemyScene({ ...NIGHT, top: 0x1a2236, mid: 0x4a5670, horizon: 0x8a9ab8, sunColor: 0xd0dcf0, sunI: 2.2, sunStrength: 4, fog: 0x8a94a8, fogD: 0.03, amb: 0.8, stars: 0, clouds: 0.8, cloudColor: 0x8a9ab0, cloudDark: 0x2a3040, moon: false }, gh, snowCol, { sunDir: V(-0.5, 0.5, -0.6) });
+  scatter(scene, 35, (r) => conifer(r.range(7, 12), 0x1c2a24, r), (r) => { const x = r.range(-25, 25), z = r.range(-40, -8); if (Math.abs(x) < 4 && z > -14) return null; return V(x, gh(x, z), z); }, 3);
+  const f = figure({ faction: 'givre', variant: 1, coat: 0x6a5a48, mail: false, legs: 0x3a3430, helm: false, beard: 1, armRot: [[-120, 30], [-140, 22]], skin: 0xc09078 });
+  onBody(f, A.mantle({ mat: MAT.fur({ color: 0x5a4434, rep: [3, 3] }), r: 0.25, len: 0.5, span: 1.7, flare: 0.4 }));
+  inHand(f, A.axeX({ head: 'bearded', haft: 0.75, scale: 1.3 }), { rx: Math.PI / 2 + 0.6 });
+  inHand(f, A.axeX({ head: 'francisca', haft: 0.5, scale: 1.2 }), { rx: Math.PI / 2 + 0.8, left: true });
+  // chevelure en bataille
+  const hair = mesh(new THREE.SphereGeometry(0.13, 16, 12), MAT.fur({ color: 0x8a5a2a, rep: [2, 2] })); hair.scale.set(1, 0.8, 1.05); hair.position.set(0, 0.06, -0.03); f.children[3].add(hair);
+  f.position.set(0, gh(0, -3), -3); f.rotation.y = deg(-10); scene.add(f);
+  const snow = G(); puffs(snow, V(0, 0, -6), 20, 1.5, 0xe8eef8, 0.15); scene.add(snow); fill(scene, 0xc8d4ec, 1.6);
+  const c = cam(38, V(0.4, 1.3, 0.6), V(-0.2, 1.6, -6));
+  return shoot(scene, c, w, h, { exposure: 1.05, grade: { vignette: 0.45 } });
+};
+S['garde-du-tyran'] = (w, h) => {
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x140c0a, 0.05);
+  scene.add(new THREE.HemisphereLight(0x5a4a40, 0x0a0604, 0.5));
+  const floor = mesh(new THREE.PlaneGeometry(40, 40), stoneM(0x5a4a3c, [10, 10])); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const st = stoneM(0x6a5a4a, [6, 3]);
+  const wl = mesh(new THREE.BoxGeometry(30, 12, 1), st); wl.position.set(0, 6, -9); scene.add(wl);
+  const gate = mesh(new THREE.BoxGeometry(3.2, 4.5, 0.4), MAT.wood({ color: 0x3a2414, rep: [2, 3] })); gate.position.set(0, 2.25, -8.4); scene.add(gate);
+  for (const x of [-4, 4]) { const col = mesh(new THREE.CylinderGeometry(0.6, 0.7, 12, 16), st); col.position.set(x, 6, -7.5); scene.add(col); torch(scene, V(x * 0.62, 3.2, -7.9), 1.8); const b = banner(0x6a0a0a, 'tower', '#1a1a1a', 5.5); b.position.set(x * 1.6, 0, -8.2); scene.add(b); }
+  const f = figure({ faction: 'aube', variant: 1, coat: 0x3a0e0c, legs: 0x1a1414, armRot: [[-8, 14], [-25, 14]], beard: 0, scale: 1.25 });
+  onBody(f, A.plateArmor({ m: MAT.metal({ color: 0x4a4a4e, rough: 0.32 }), trim: MAT.metal({ color: 0x8a1a14, rough: 0.4 }), cloth: MAT.cloth({ color: 0x3a0e0c }), bodyOnly: true }));
+  helmOn(f, A.greatHelm({ m: MAT.metal({ color: 0x4a4a4e, rough: 0.32 }), top: 'sugar', trim: MAT.metal({ color: 0x8a1a14, rough: 0.4 }) }), 0.03);
+  const gs = A.guisarme(); gs.scale.setScalar(1.25); inHand(f, gs, { rx: 0.15, pos: [0, -0.9, 0.04] });
+  f.position.set(0, 0, -3.4); f.rotation.y = deg(-12); scene.add(f);
+  const key = new THREE.PointLight(0xffa060, 8, 10, 1.6); key.position.set(-1.5, 3, -1.5); scene.add(key);
+  scene.add(new THREE.AmbientLight(0x6a4a3a, 0.4));
+  return shoot(scene, cam(40, V(0.6, 1.4, 0.8), V(-0.2, 1.7, -6)), w, h, { exposure: 1.2, bloom: { strength: 0.35 } });
+};
+S['seigneur-pillard'] = (w, h) => {
+  const hill = (x, z) => hills(1.5, 0.03)(x, z) + 7 * Math.exp(-((x + 22) ** 2 + (z + 75) ** 2) / 500);
+  const scene = enemyScene({ ...DUSK, top: 0x1e1a2a, mid: 0x6a3a30, horizon: 0xd8703a, sunColor: 0xff8040, fog: 0x5a3a30, fogD: 0.012, clouds: 0.8, cloudColor: 0xb05030, cloudDark: 0x2a1418 }, hill, (x, z, hh, sl) => grassCol(x, z, hh, sl).multiplyScalar(0.6), { sunDir: V(0.7, 0.2, -0.6), sunI: 2 });
+  const st = stoneM(0x8a7a68, [4, 4]); const cs = G(); cs.position.set(-22, hill(-22, -75) - 0.5, -75);
+  const k = keep(8, 6, 12, st); cs.add(k); for (const [x, z] of [[-7, -5], [7, -5], [-7, 5], [7, 5]]) { const t = tower(2, 9, st, { roof: 0x3a2018 }); t.position.set(x, 0, z); cs.add(t); }
+  for (const [a, b] of [[[-7, -5], [7, -5]], [[-7, 5], [7, 5]], [[-7, -5], [-7, 5]], [[7, -5], [7, 5]]]) { const p1 = V(a[0], 0, a[1]), p2 = V(b[0], 0, b[1]); const wl = wall(p1.distanceTo(p2), 6, 1.2, st); wl.position.copy(p1.clone().add(p2).multiplyScalar(0.5)); wl.rotation.y = -Math.atan2(p2.z - p1.z, p2.x - p1.x); cs.add(wl); }
+  scene.add(cs);
+  const r = rng(6); [[6, -14], [10, -20]].forEach(([x, z]) => { const hs = house(4.5, 3.5, 2.4, { roofC: 0x5a4028, wallC: 0x9a8868 }); hs.position.set(x, hill(x, z), z); hs.rotation.y = r() * 3; scene.add(hs); fire(scene, V(x, hill(x, z) + 2.6, z), 1.8, { light: 50 }); });
+  const f = figure({ faction: 'aube', variant: 3, coat: 0x4a1a3a, legs: 0x2a2026, cloakColor: 0x2a0a1a, armRot: [[-12, 14], [-40, 18]], beard: 0.9, shield: { type: 'kite', field: '#1a1a1a', emblem: 'bend', emblemColor: '#a01a14' } });
+  helmOn(f, A.bascinet({ visor: false, m: MAT.metal({ color: 0x9a9a9e, rough: 0.3 }) }), 0.03);
+  inHand(f, A.flangedMace({ len: 0.6, shaftM: MAT.metal({ color: 0x7a7a7e }), headM: MAT.metal({ color: 0x9a9a9e, rough: 0.3 }), trim: MAT.gold() }), { rx: Math.PI / 2 + 0.4 });
+  f.position.set(0, hill(0, -3), -3); f.rotation.y = deg(-20); scene.add(f);
+  embers(scene, V(8, 3, -17), 40, 10); fill(scene, 0xffa070, 1.7);
+  return shoot(scene, cam(38, V(0.6, 1.4, 0.4), V(-0.5, 1.5, -6)), w, h);
+};
+S['capitaine-mercenaire'] = (w, h) => {
+  const gh = hills(1, 0.04);
+  const scene = enemyScene({ ...DAY, horizon: 0xd8c8a8, clouds: 0.7, cloudDark: 0x707888, sunColor: 0xffe0b0 }, gh, (x, z, hh, sl) => grassCol(x, z, hh, sl).lerp(C(0x8a7a50), 0.35), { sunDir: V(-0.6, 0.45, 0.3) });
+  const r = rng(2); [[-7, -12], [-2, -16], [5, -13], [9, -19]].forEach(([x, z], i) => { const t = i % 2 ? ridgeTent(3, 4, 2.2, 0xa89878) : bellTent(2.2, 3.2, 0xc8b898); t.position.set(x, gh(x, z) - 0.1, z); t.rotation.y = r() * 6; scene.add(t); });
+  // trois bannières, déchirées
+  [[-3, -7, 0xe4ddca, 'sun', '#c99528'], [-1.6, -7.6, 0x2c5a38, 'star', '#d0a038'], [-0.2, -8.2, 0x1a2a50, 'raven', '#c4c8ce']].forEach(([x, z, c, e, ec], i) => { const b = banner(c, e, ec, 4.2, 1.4); b.position.set(x, gh(x, z), z); b.rotation.z = (i - 1) * 0.08; scene.add(b); });
+  const f = figure({ variant: 2, coat: 0x2a2a5a, legs: 0x5a2a1a, cloakColor: 0x6a5a3a, armRot: [[-10, 14], [-30, 18]], beard: 0.6, skin: 0xa07058 });
+  onBody(f, A.vest({ mat: A.rivetCloth('#2a2a5a', '#e0c070', { velvet: true }), length: 0.6, flare: 0.3, inflate: 1.12 }));
+  helmOn(f, A.sallet({}), 0.04);
+  inHand(f, A.swordX({ len: 0.78, w0: 0.05, w1: 0.03, tip: 0.17, guard: 'curved', guardLen: 0.2, gripLen: 0.14, pommelType: 'scent', guardMat: MAT.metal({ color: 0xc8a050, rough: 0.3 }) }));
+  f.position.set(0.3, gh(0.3, -3), -3); f.rotation.y = deg(-22); scene.add(f);
+  return shoot(scene, cam(38, V(0.6, 1.45, 0.4), V(-0.5, 1.4, -6)), w, h);
+};
+S['seigneur-dechu'] = (w, h) => {
+  const gh = hills(1.6, 0.03);
+  const scene = enemyScene({ ...DUSK, top: 0x2a2a40, mid: 0x8a5a50, horizon: 0xf09050, sunColor: 0xffa060, fog: 0x8a6050, fogD: 0.012, clouds: 0.75 }, gh, (x, z, hh, sl) => dryCol(x, z, hh, sl).multiplyScalar(0.6), { sunDir: V(-0.5, 0.12, -1), sunI: 2.4 });
+  scatter(scene, 14, (r) => { const s = M.spear({ len: 2 }); s.rotation.z = r.range(-0.6, 0.6); s.rotation.x = r.range(-0.4, 0.4); return s; }, (r) => { const x = r.range(-12, 12), z = r.range(-22, -5); return V(x, gh(x, z) - 0.3, z); }, 6);
+  [[-5, -10, 0x1c2a5a, 'royal'], [6, -14, 0x5a1a14, null]].forEach(([x, z, c, e], i) => { const b = banner(c, e, '#c8a850', 4.5, 1.5); b.position.set(x, gh(x, z) - 0.2, z); b.rotation.z = i ? -0.35 : 0.25; scene.add(b); });
+  const f = figure({ faction: 'aube', variant: 0, coat: 0x2a2a30, legs: 0x2a2626, cloakColor: 0x4a1410, armRot: [[-30, 8], [-30, -2]], beard: 1, helm: false, skin: 0xa07860 });
+  onBody(f, A.plateArmor({ m: MAT.metal({ color: 0x6a6a70, rough: 0.35 }), trim: MAT.metal({ color: 0xa08040, rough: 0.4 }), cloth: MAT.cloth({ color: 0x2a2a30 }), bodyOnly: true }));
+  const hair = mesh(new THREE.SphereGeometry(0.125, 16, 12), MAT.fur({ color: 0x6a6a68, rep: [2, 2] })); hair.scale.set(1, 0.75, 1.05); hair.position.set(0, 0.05, -0.03); f.children[3].add(hair);
+  inHand(f, A.swordX({ len: 1.0, w0: 0.055, w1: 0.034, tip: 0.18, guard: 'bar', guardLen: 0.3, gripLen: 0.24, pommelType: 'pear', ricasso: 0.06 }), { rx: Math.PI + 0.1, pos: [0.0, 0, 0.0] });
+  crows(scene, V(0, 7, -16), 6, 6); fill(scene, 0xffc090, 1.7);
+  f.position.set(0, gh(0, -3), -3); f.rotation.y = deg(-8); scene.add(f);
+  return shoot(scene, cam(38, V(0.5, 1.3, 0.5), V(-0.3, 1.45, -6)), w, h);
+};
+S['gardien-des-tombeaux'] = (w, h) => {
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x060a10, 0.07);
+  scene.add(new THREE.HemisphereLight(0x3a4a6a, 0x05070a, 0.8)); fill(scene, 0x6a8ab0, 0.6);
+  const st = stoneM(0x6a6a68, [8, 8]);
+  const floor = mesh(new THREE.PlaneGeometry(40, 40), st); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const back = mesh(new THREE.BoxGeometry(30, 10, 1), stoneM(0x5a5a5c, [8, 3])); back.position.set(0, 5, -12); scene.add(back);
+  for (let i = 0; i < 4; i++) for (const x of [-3.5, 3.5]) { const col = mesh(new THREE.CylinderGeometry(0.45, 0.5, 6, 14), stoneM(0x7a7874, [1, 3])); col.position.set(x, 3, -2.5 - i * 3); scene.add(col); }
+  [[-2.2, -5, 0.1], [2.2, -6, -0.1], [-2.2, -9, 0], [2.2, -10.5, 0.05]].forEach(([x, z, ry], i) => { const s = sarcophagus(stoneM(0x8a8682, [1, 1]), i); s.position.set(x, 0, z); s.rotation.y = ry; scene.add(s); });
+  for (const [x, z] of [[-3.2, -4], [3.2, -7]]) { const l = new THREE.PointLight(0x5ab0ff, 12, 9, 1.5); l.position.set(x, 2.4, z); scene.add(l); const f2 = mesh(new THREE.SphereGeometry(0.12, 10, 8), new THREE.MeshBasicMaterial({ color: C(0x8ad0ff).multiplyScalar(3), fog: false })); f2.position.copy(l.position); scene.add(f2); }
+  const bronze = MAT.metal({ color: 0x5a7a62, rough: 0.5 });
+  const f = figure({ faction: 'aube', variant: 2, coat: 0x2a3a34, legs: 0x1a2220, cloakColor: 0x1a2622, armRot: [[-25, 14], [-15, 12]], beard: 0, skin: 0x7a8a88, helm: false });
+  onBody(f, A.plateArmor({ m: bronze, trim: MAT.metal({ color: 0xa08848, rough: 0.45 }), cloth: MAT.cloth({ color: 0x1a2a26 }), bodyOnly: true }));
+  helmOn(f, A.crownHelm({ m: bronze, crownM: MAT.metal({ color: 0xa08848, rough: 0.45 }), gems: [0x5ad0ff, 0x5ad0ff], glow: 1.2 }), 0.045);
+  glowEyes(f, 0x6ad0ff);
+  const sh = A.metalRound({ R: 0.36, dome: 0.06, m: bronze, rimM: MAT.metal({ color: 0xa08848, rough: 0.45 }) }); sh.position.set(-0.32, 1.15, 0.2); sh.rotation.y = deg(-25); f.add(sh);
+  const sp = M.spear({ len: 2.1 }); inHand(f, sp, { rx: 0.1, pos: [0, -0.9, 0.04] });
+  f.position.set(0, 0, -3.4); f.rotation.y = deg(-10); scene.add(f);
+  embers(scene, V(0, 1.5, -5), 40, 5, 0x6ac0ff, 0.06);
+  return shoot(scene, cam(42, V(0.5, 1.3, 0.8), V(-0.2, 1.6, -6)), w, h, { exposure: 1.4, bloom: { strength: 0.45 } });
+};
+S['general-renegat'] = (w, h) => {
+  const gh = (x, z) => hills(2.2, 0.03)(x, z) - Math.max(0, -z - 8) * 0.25;
+  const scene = enemyScene({ ...DUSK, top: 0x1e2236, mid: 0x6a4a4a, horizon: 0xe09060, sunColor: 0xffa070, fog: 0x7a5a50, fogD: 0.014, clouds: 0.7, cloudDark: 0x2a1e24 }, gh, (x, z, hh, sl) => dryCol(x, z, hh, sl).lerp(C(0x5a5038), 0.4), { sunDir: V(-0.8, 0.25, -0.5), sunI: 2.4 });
+  const r = rng(11);
+  for (let i = 0; i < 34; i++) { const x = r.range(-14, 10), z = r.range(-26, -10); const f = figure({ variant: i % 4, coat: [0x1a1a1a, 0x3a1a14, 0x2a2a2a][i % 3], legs: 0x2a2420, spear: i % 2 === 0, shield: i % 3 === 0 ? { type: 'round', field: '#1a1a1a' } : null, beard: 0.5 }); f.position.set(x, gh(x, z), z); f.rotation.y = deg(160 + r.range(-15, 15)); scene.add(f); }
+  [[-6, -16], [2, -20], [7, -14]].forEach(([x, z]) => { const b = banner(0x141414, 'bend', '#a01a14', 5.5); b.position.set(x, gh(x, z), z); scene.add(b); });
+  const rd = rider(0x1a1410, { faction: 'aube', variant: 1, coat: 0x1a1a1a, cloakColor: 0x6a0e0a, armRot: [[-20, 10], [-70, 15]], beard: 0.8 });
+  rd.position.set(0.5, gh(0.5, -5) - 0.1, -5); rd.rotation.y = deg(-60); scene.add(rd);
+  const fig = rd.children[1]; helmOn(fig, A.greatHelm({ m: MAT.metal({ color: 0x3a3a3e, rough: 0.35 }), top: 'sugar', trim: MAT.metal({ color: 0x8a1a14, rough: 0.4 }), crest: 'fan' }), 0.03);
+  inHand(fig, A.swordX({ len: 0.85, guard: 'curved', guardLen: 0.2, gripLen: 0.14, pommelType: 'wheel' }), { rx: Math.PI * 0.9 }); fill(scene, 0xffc0a0, 1.8, V(4, 4, 6));
+  return shoot(scene, cam(40, V(2.6, 2.2, 1.6), V(-0.8, 2.0, -7)), w, h);
+};
+S['roi-sans-couronne'] = (w, h) => {
+  const gh = (x, z) => hills(1.0, 0.04)(x, z) - Math.max(0, -z - 6) * 0.9;
+  const scene = enemyScene({ ...DUSK, top: 0x1a2240, mid: 0x6a5070, horizon: 0xf0a060, sunColor: 0xffb070, fog: 0x7a6070, fogD: 0.008, clouds: 0.6 }, gh, (x, z, hh, sl) => grassCol(x, z, hh, sl).lerp(C(0x7a6a4a), 0.4), { sunDir: V(0.7, 0.15, -0.8), sunI: 2.6 });
+  // la capitale en ruines, au loin dans la vallée
+  const st = stoneM(0xb8a890, [3, 3]); const cit = G(); cit.position.set(-8, gh(-8, -60) - 1, -60);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; const t = ruinTower(2, 8 + (i % 3) * 3, st, i); t.position.set(Math.cos(a) * 12, 0, Math.sin(a) * 12); cit.add(t); }
+  const k = ruinTower(4, 18, st, 9); cit.add(k); scene.add(cit);
+  [[-2.2, -5], [2.4, -6]].forEach(([x, z]) => { const b = royalBanner(5); b.position.set(x, gh(x, z), z); scene.add(b); });
+  const f = figure({ faction: 'aube', variant: 1, coat: 0x1c2a5a, legs: 0x1a1a2a, cloakColor: 0x1c2a5a, armRot: [[-10, 12], [-25, 14]], beard: 0.7, helm: false, skin: 0xb08068 });
+  onBody(f, A.plateArmor({ m: MAT.polished({ color: 0xc8cad0, rough: 0.15 }), trim: MAT.gold(), cloth: MAT.cloth({ color: 0x1c2a5a }), bodyOnly: true, star: MAT.gold() }));
+  const hair = mesh(new THREE.SphereGeometry(0.125, 16, 12), MAT.fur({ color: 0x2a1a10, rep: [2, 2] })); hair.scale.set(1, 0.78, 1.05); hair.position.set(0, 0.05, -0.03); f.children[3].add(hair);
+  inHand(f, A.swordX({ len: 0.88, w0: 0.056, w1: 0.042, guard: 'wing', guardLen: 0.24, guardMat: MAT.gold(), pommelType: 'star', pommelMat: MAT.gold(), gripMat: MAT.leather({ color: 0x1a2a6a }) }), { rx: Math.PI / 2 + 0.5 });
+  f.position.set(0, gh(0, -3), -3); f.rotation.y = deg(-20); scene.add(f); fill(scene, 0xffc8a0, 1.8);
+  return shoot(scene, cam(38, V(0.6, 1.3, 0.5), V(-0.6, 1.45, -6)), w, h);
+};
+S['seigneur-des-ruines'] = (w, h) => {
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0a0c14, 0.045);
+  scene.add(new THREE.HemisphereLight(0x4a5a7a, 0x080808, 0.5));
+  const st = stoneM(0x7a746c, [8, 8]);
+  const floor = mesh(new THREE.PlaneGeometry(40, 40), st); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const back = mesh(new THREE.BoxGeometry(30, 14, 1), stoneM(0x5a5652, [8, 4])); back.position.set(0, 7, -10); scene.add(back);
+  const r = rng(7);
+  [[-4, -4, 7], [4, -4, 3.2], [-4, -8, 2.4], [4, -8, 7]].forEach(([x, z, hh]) => { const col = mesh(new THREE.CylinderGeometry(0.5, 0.55, hh, 14), st); col.position.set(x, hh / 2, z); scene.add(col); });
+  scatter(scene, 16, (rr) => { const b = mesh(new THREE.BoxGeometry(rr.range(0.4, 1.2), rr.range(0.3, 0.7), rr.range(0.4, 1)), st); b.rotation.set(rr(), rr(), rr()); return b; }, (rr) => V(rr.range(-6, 6), 0.2, rr.range(-9, -2)), 5);
+  const th = throne(stoneM(0x8a8070, [1, 2])); th.position.set(0, 0.12, -5); scene.add(th);
+  [[-1.5, -6.5], [1.5, -6.5]].forEach(([x, z]) => { const b = royalBanner(6); b.position.set(x, 0, z); b.children.forEach((c) => { if (c.geometry && c.geometry.type === 'PlaneGeometry') c.scale.y = 0.75; }); scene.add(b); });
+  const f = figure({ faction: 'aube', variant: 0, coat: 0x1c2240, legs: 0x1a1a22, cloakColor: 0x141a34, armRot: [[-38, 22], [-38, 22]], beard: 0, skin: 0x6a6c70, helm: false });
+  onBody(f, A.plateArmor({ m: MAT.metal({ color: 0x8a8a90, rough: 0.35 }), trim: MAT.gold({ rough: 0.4 }), cloth: MAT.cloth({ color: 0x1c2240 }), bodyOnly: true }));
+  helmOn(f, A.crownHelm({ m: MAT.metal({ color: 0x5a5a60, rough: 0.4 }), crownM: MAT.gold({ rough: 0.3 }), gems: [0x5ab0ff, 0xd01030], glow: 1.4 }), 0.045);
+  glowEyes(f, 0x7ac8ff);
+  f.children[0].rotation.x = -1.35; f.children[0].position.z = 0.0;
+  inHand(f, A.swordX({ len: 0.88, guard: 'wing', guardLen: 0.24, guardMat: MAT.gold(), pommelType: 'star', pommelMat: MAT.gold() }), { rx: Math.PI * 0.75 });
+  f.position.set(0, 0.95 - 0.9 + 0.08, -4.8); scene.add(f);
+  const shaft = new THREE.SpotLight(0xbfd0ff, 22, 20, 0.35, 0.6, 1.2); shaft.position.set(2, 10, -2); shaft.target.position.set(0, 1.5, -5); scene.add(shaft, shaft.target); shaft.castShadow = true;
+  embers(scene, V(0, 2, -5), 30, 6, 0x9ac0ff, 0.05);
+  void r;
+  return shoot(scene, cam(42, V(0.8, 1.5, 0.6), V(0, 1.6, -5)), w, h, { exposure: 1.5, bloom: { strength: 0.45 } });
+};
+
+// ------------------------------------------------------------------ travaux (lot 2)
+S.chantier = (w, h) => {
+  const gh = hills(1.2, 0.03);
+  const scene = world({ ...DAY, sunDir: V(-0.5, 0.55, -0.3), horizon: 0xe8dcc0 });
+  terrain(scene, { size: 300, h: (x, z) => gh(x, z) - 1.4 * smooth(2, 0.5, Math.abs(z + 8 + Math.sin(x * 0.2))), color: (x, z, hh, sl) => grassCol(x, z, hh, sl).lerp(C(0x7a5a3a), smooth(2.5, 1, Math.abs(z + 8 + Math.sin(x * 0.2)))) });
+  const st = stoneM(0xc8b898, [4, 4]);
+  const tw = mesh(new THREE.CylinderGeometry(3, 3.2, 5, 24), st); tw.position.set(-3, 2.5, -14); scene.add(tw);
+  const wl = wall(10, 3, 1.4, st, false); wl.position.set(4, 0, -14.5); scene.add(wl);
+  // échafaudage
+  const wd = MAT.wood({ color: 0x9a7448, rep: [1, 3] });
+  for (let i = 0; i < 6; i++) { const a = -1.2 + i * 0.5; const p = mesh(new THREE.CylinderGeometry(0.07, 0.07, 7, 6), wd); p.position.set(-3 + Math.cos(a) * 3.6, 3.5, -14 + Math.sin(a) * 3.6); scene.add(p); }
+  for (const y of [2.2, 4.4]) { const ring = mesh(new THREE.TorusGeometry(3.6, 0.06, 6, 24, Math.PI * 0.85), wd); ring.rotation.x = Math.PI / 2; ring.rotation.z = -1.25; ring.position.set(-3, y, -14); scene.add(ring); }
+  const cr = crane(); cr.position.set(5, gh(5, -12), -12); cr.rotation.y = -0.6; scene.add(cr);
+  scatter(scene, 10, (r) => mesh(new THREE.BoxGeometry(0.7, 0.4, 0.5), st), (r) => V(r.range(-1, 4), 0.2, r.range(-6, -3)), 4);
+  [[0.5, -4, 200], [-1.5, -5.5, 120], [2.5, -6.5, 230], [-4, -9, 160]].forEach(([x, z, ry], i) => { const f = figure({ variant: i, coat: [0x8a6a40, 0x6a5a3a, 0x9a8a60, 0x7a6040][i], mail: false, helm: false, hood: i === 1 ? 0x5a4a30 : null, legs: 0x4a3a28, armRot: [[-40, 15], [-70, 15]], beard: i % 2, skin: 0xa87860 }); f.position.set(x, gh(x, z), z); f.rotation.y = deg(ry); scene.add(f); });
+  const b = banner(0xe4ddca, 'sun', '#c99528', 4.5); b.position.set(-6, gh(-6, -9), -9); scene.add(b);
+  return shoot(scene, cam(40, V(3, 2.6, 3), V(-1, 2, -10)), w, h);
+};
+S.percepteur = (w, h) => {
+  const gh = hills(1, 0.03);
+  const scene = world({ ...DUSK, sunDir: V(-0.6, 0.35, -0.4), sunI: 2.6, top: 0x2a3a60, horizon: 0xf8c080 });
+  terrain(scene, { size: 200, h: gh, color: roadMix(dryCol, (z) => 0, 3) });
+  const r = rng(3); [[-7, -10], [6, -11], [-9, -18], [8, -20], [0, -24]].forEach(([x, z]) => { const hs = house(r.range(4, 6), r.range(3, 4), 2.6, { roofC: 0x7a6038, wallC: 0xb8a888 }); hs.position.set(x, gh(x, z), z); hs.rotation.y = Math.atan2(-x, -z) + Math.PI; scene.add(hs); });
+  const table = mesh(new THREE.BoxGeometry(1.8, 0.08, 0.9), MAT.wood({ color: 0x5a3a20 })); table.position.set(-0.6, 0.82, -5); scene.add(table);
+  for (const x of [-1.4, 0.2]) for (const z of [-0.35, 0.35]) { const l = mesh(new THREE.BoxGeometry(0.08, 0.8, 0.08), MAT.wood({ color: 0x4a2a18 })); l.position.set(x, 0.4, -5 + z); scene.add(l); }
+  const ch = chest(0.9, true); ch.position.set(0.7, 0, -4.6); ch.rotation.y = -0.4; scene.add(ch);
+  for (let i = 0; i < 4; i++) { const bag = mesh(new THREE.SphereGeometry(0.13, 12, 10), MAT.cloth({ color: 0x9a7a50 })); bag.scale.y = 1.2; bag.position.set(-1.2 + i * 0.25, 0.98, -5 + (i % 2) * 0.15); scene.add(bag); }
+  const parch = mesh(new THREE.PlaneGeometry(0.5, 0.35), MAT.plain(0xe8d8b0)); parch.rotation.x = -Math.PI / 2; parch.position.set(-0.3, 0.87, -4.9); scene.add(parch);
+  const col = figure({ variant: 1, coat: 0x4a2a5a, mail: false, helm: false, hood: 0x3a2048, legs: 0x3a2a30, beard: 0.4, armRot: [[-50, 10], [-50, 10]] }); col.position.set(-0.6, 0, -5.8); scene.add(col);
+  [[2.2, -5.5, -60], [-2.6, -5.2, 60]].forEach(([x, z, ry], i) => { const g = figure({ faction: 'aube', variant: i + 2, coat: 0xd8d0bc, spear: true, shield: i ? SH.aube : null }); g.position.set(x, 0, z); g.rotation.y = deg(ry); scene.add(g); });
+  [[0.4, -2.8, 190], [-0.6, -2.4, 175]].forEach(([x, z, ry], i) => { const p = figure({ variant: i, coat: [0x6a5a40, 0x8a7a58][i], mail: false, helm: false, hood: 0x5a4a30, legs: 0x4a3a28, beard: 0.6, skin: 0xa07058 }); p.position.set(x, 0, z); p.rotation.y = deg(ry); scene.add(p); });
+  return shoot(scene, cam(40, V(2.5, 2.4, 1.6), V(-0.8, 1.0, -5.5)), w, h);
+};
+S.frontiere = (w, h) => {
+  const gh = (x, z) => hills(2.5, 0.03)(x, z) - 1.6 * smooth(6, 2, Math.abs(z + 12 + Math.sin(x * 0.15) * 2));
+  const scene = world({ ...DUSK, sunDir: V(0.7, 0.25, -0.6), sunI: 2.4, top: 0x24345a, horizon: 0xf0a868 });
+  terrain(scene, { size: 300, h: gh, color: (x, z, hh, sl) => grassCol(x, z, hh, sl).lerp(C(0x8a7a5a), smooth(4, 2, Math.abs(z + 12 + Math.sin(x * 0.15) * 2))) });
+  water(scene, [300, 6], -0.9, 0x3a5070, V(0, 0, -12));
+  const wt = watchtower(6.5); wt.position.set(-4, gh(-4, -5), -5); wt.rotation.y = 0.3; scene.add(wt);
+  palisade(scene, 14, 0, -6.5, 0.32, 0.02, 2.6, 3);
+  const b = banner(0xe4ddca, 'sun', '#c99528', 3); b.position.set(-4, gh(-4, -5) + 5.4, -5); scene.add(b);
+  const g1 = figure({ faction: 'aube', variant: 0, coat: 0xd8d0bc, spear: true, shield: SH.aube }); g1.position.set(1.2, gh(1.2, -4), -4); g1.rotation.y = deg(160); scene.add(g1);
+  const g2 = figure({ faction: 'aube', variant: 2, coat: 0xd8d0bc, spear: true }); g2.position.set(-4, gh(-4, -5) + 5.3, -4.4); g2.rotation.y = deg(170); scene.add(g2);
+  // en face, de l'autre côté du gué
+  const b2 = banner(0x2c5a38, 'star', '#d0a038', 4); b2.position.set(10, gh(10, -22), -22); scene.add(b2);
+  scatter(scene, 16, (r) => (r() < 0.5 ? cypress(r.range(5, 8), r) : broadleaf(r.range(4, 7), 0x4a5a2a, r)), (r) => { const x = r.range(-30, 30), z = r.range(-45, -18); return V(x, gh(x, z), z); }, 9);
+  fire(scene, V(2.4, gh(2.4, -5.5), -5.5), 0.6, { light: 15 });
+  return shoot(scene, cam(40, V(3.5, 2.2, 2.5), V(-1.5, 1.8, -10)), w, h);
+};
+S.cavalerie = (w, h) => {
+  const gh = hills(2.4, 0.025); const rx = (z) => Math.sin(z * 0.05) * 5;
+  const scene = world({ ...DAY, sunDir: V(-0.7, 0.4, 0.3), clouds: 0.6, horizon: 0xe8dcc0 });
+  terrain(scene, { size: 300, h: gh, color: roadMix(grassCol, rx, 2.2) });
+  for (let i = 0; i < 5; i++) { const z = -5 - i * 3.2; const x = rx(z) + (i % 2 ? 0.9 : -0.9); const rd = rider([0x4a2e1c, 0x2a1e16, 0x6a4a30, 0x3a2a1c, 0x8a6a48][i], { faction: 'aube', variant: i % 4, coat: 0xd8d0bc, cloakColor: i === 0 ? 0x7a2a20 : null, spear: i !== 0, armRot: [[-20, 10], [-45, 12]] }); rd.position.set(x, gh(x, z) - 0.1, z); rd.rotation.y = deg(170 + (i % 2 ? -6 : 6)); scene.add(rd); }
+  const b = banner(0xe4ddca, 'sun', '#c99528', 3); b.position.set(rx(-5) - 0.6, gh(rx(-5), -5) + 1.7, -5.1); b.scale.setScalar(0.85); scene.add(b);
+  scatter(scene, 22, (r) => broadleaf(r.range(5, 9), 0x3a5a24, r), (r) => { const z = r.range(-80, -6), x = rx(z) + (r() < 0.5 ? -1 : 1) * r.range(7, 30); return V(x, gh(x, z), z); }, 3);
+  const dust = G(); puffs(dust, V(rx(-10), 0.3, -10), 18, 1.6, 0xc8b090, 0.2); scene.add(dust);
+  return shoot(scene, cam(38, V(4, 2.3, 4), V(-0.8, 1.6, -11)), w, h);
+};
+S.espion = (w, h) => {
+  const gh = hills(1.5, 0.03);
+  const scene = world({ ...NIGHT, sunDir: V(0.4, 0.4, -0.8), sunI: 1.3 });
+  terrain(scene, { size: 300, h: gh, color: (x, z, hh, sl) => grassCol(x, z, hh, sl).multiplyScalar(0.55).lerp(C(0x3a3428), 0.3) });
+  const r = rng(13);
+  [[-1, -9], [4, -12], [-5, -14], [1.5, -17], [7, -19], [-3, -21]].forEach(([x, z], i) => { const t = i % 2 ? ridgeTent(3, 4, 2.2, 0x6a5a48, i === 1 ? 0.5 : 0) : bellTent(2.3, 3.3, 0x7a6a50, i === 0 ? 0.0 : 0.6); t.position.set(x, gh(x, z) - 0.1, z); t.rotation.y = r() * 6; scene.add(t); });
+  fire(scene, V(2.5, gh(2.5, -14), -14), 1, { light: 35 });
+  [[3.4, -13.2, 220], [1.4, -13.6, 120]].forEach(([x, z, ry], i) => { const g = figure({ faction: 'sables', variant: i, coat: 0x2f5a3a, spear: i === 0 }); g.position.set(x, gh(x, z), z); g.rotation.y = deg(ry); scene.add(g); });
+  const b = banner(0x2c5a38, 'star', '#d0a038', 4.5); b.position.set(-2.5, gh(-2.5, -12), -12); scene.add(b);
+  // l'espion, accroupi derrière la toile
+  const f = figure({ variant: 3, coat: 0x1a1a1e, mail: false, hood: 0x121216, legs: 0x16161a, beard: 0, armRot: [[-60, 15], [-30, 12]], skin: 0x8a6048, cloakColor: 0x0e0e12 });
+  f.children[0].scale.y = 0.6; f.children[0].position.y = 0.55; f.children.slice(1).forEach((c) => (c.position.y -= 0.32)); f.rotation.x = 0.0;
+  f.position.set(-1.1, gh(-1.1, -3.6), -3.6); f.rotation.y = deg(165); scene.add(f); fill(scene, 0x9ab0e0, 0.8, V(-3, 4, 4));
+  return shoot(scene, cam(40, V(-0.3, 1.5, 0.4), V(0.6, 0.9, -12)), w, h, { exposure: 1.7 });
+};
+S.convoi = (w, h) => {
+  const gh = hills(2, 0.03); const rx = (z) => Math.sin(z * 0.06) * 4;
+  const scene = world({ ...DUSK, sunDir: V(-0.5, 0.3, -0.7), sunI: 2.6, top: 0x3a5a8a, mid: 0xb08a7a, horizon: 0xffc080 });
+  terrain(scene, { size: 300, h: gh, color: roadMix(dryCol, rx, 2.4) });
+  [[-4, 0], [-11, 1]].forEach(([z, k]) => { const x = rx(z); const load = G(); const c1 = chest(0.9, false); c1.position.x = -0.25; load.add(c1); const c2 = chest(0.8, true); c2.position.set(0.25, 0, -0.9); load.add(c2); const ct = cart(load); ct.position.set(x, gh(x, z), z); ct.rotation.y = deg(175 + k * 6); scene.add(ct); const hs = horse([0x4a2e1c, 0x6a4a30][k]); hs.position.set(x + 0.1, gh(x, z + 3), z + 3.2); hs.rotation.y = deg(175); scene.add(hs); });
+  [[1.3, -2.5], [-1.4, -6], [1.4, -8.5], [-1.3, -13]].forEach(([dx, z], i) => { const x = rx(z) + dx; const g = figure({ faction: 'aube', variant: i % 4, coat: 0xd8d0bc, spear: true, shield: i % 2 ? SH.aube : null, cloakColor: i === 0 ? 0x7a2a20 : null }); g.position.set(x, gh(x, z), z); g.rotation.y = deg(178); scene.add(g); });
+  const b = banner(0xe4ddca, 'sun', '#c99528', 4); b.position.set(rx(-2.5) + 1.8, gh(rx(-2.5) + 1.8, -2.5), -2.5); scene.add(b);
+  scatter(scene, 18, (r) => (r() < 0.5 ? cypress(r.range(5, 8), r) : broadleaf(r.range(4, 6), 0x5a6230, r)), (r) => { const z = r.range(-60, -6), x = rx(z) + (r() < 0.5 ? -1 : 1) * r.range(5, 25); return V(x, gh(x, z), z); }, 3);
+  return shoot(scene, cam(40, V(3.5, 2.6, 3), V(-0.4, 1.0, -9)), w, h);
+};
+S['maitre-d-armes'] = (w, h) => {
+  const scene = world({ ...DAY, sunDir: V(-0.6, 0.6, 0.2), horizon: 0xe8dcc0 });
+  terrain(scene, { size: 200, h: (x, z) => 0.15 * fbm(x * 0.1, z * 0.1, 1, 2), color: (x, z) => mixc(0xb09a72, 0xc8b088, 0.5 + fbm(x * 0.2, z * 0.2, 1, 3)) });
+  palisade(scene, 40, -12, -13, 0.6, 0, 3, 2);
+  // râtelier d'armes
+  const wd = MAT.wood({ color: 0x5a3a20, rep: [1, 2] }); const rack = G(); rack.position.set(4, 0, -8.5);
+  for (const x of [-1, 1]) { const p = mesh(new THREE.BoxGeometry(0.12, 1.6, 0.12), wd); p.position.set(x, 0.8, 0); rack.add(p); }
+  const bar = mesh(new THREE.BoxGeometry(2.2, 0.1, 0.1), wd); bar.position.y = 1.4; rack.add(bar);
+  [A.swordX({}), A.axeX({ head: 'bearded', haft: 0.8 }), A.huntSpear(), A.swordX({ len: 1.0, gripLen: 0.22 })].forEach((o, i) => { o.position.set(-0.8 + i * 0.5, 0.2, 0.1); o.rotation.z = 0.05; if (i === 2) o.scale.setScalar(0.8); rack.add(o); });
+  scene.add(rack);
+  const q = G(); const post = mesh(new THREE.CylinderGeometry(0.1, 0.12, 2, 8), wd); post.position.y = 1; q.add(post); const arm = mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), wd); arm.rotation.z = Math.PI / 2; arm.position.y = 1.8; q.add(arm); const sh = M.roundShield({ field: '#7a5a3a', R: 0.35 }); sh.position.set(-0.6, 1.6, 0.05); q.add(sh); q.position.set(-5, 0, -9); scene.add(q);
+  const m = figure({ faction: 'aube', variant: 1, coat: 0xa02a20, mail: true, helm: false, beard: 1, armRot: [[-20, 18], [-60, 20]], skin: 0xa87860 });
+  inHand(m, A.swordX({ len: 0.8, guard: 'bar', guardLen: 0.2, gripLen: 0.12 }), { rx: Math.PI / 2 + 0.6 });
+  m.position.set(-1.1, 0, -5); m.rotation.y = deg(70); scene.add(m);
+  [[1.1, -4.6, -100], [1.5, -6.2, -80]].forEach(([x, z, ry], i) => { const s = figure({ faction: 'aube', variant: i + 2, coat: 0xb8a888, mail: i === 0, helm: i === 0, legs: 0x5a4a38, shield: i === 0 ? { type: 'round', field: '#7a5a3a' } : null, armRot: [[-30, 15], [-70, 18]], beard: 0.2 }); inHand(s, A.swordX({ len: 0.75 }), { rx: Math.PI / 2 + 0.5 }); s.position.set(x, 0, z); s.rotation.y = deg(ry); scene.add(s); });
+  const b = banner(0xe4ddca, 'sun', '#c99528', 5); b.position.set(-8, 0, -12); scene.add(b);
+  return shoot(scene, cam(40, V(1, 2.0, 2), V(0, 1.1, -6)), w, h);
+};
+S.siege = (w, h) => {
+  const gh = hills(1.2, 0.03);
+  const scene = world({ ...DUSK, top: 0x2a2a3a, mid: 0x8a5a4a, horizon: 0xe89050, sunDir: V(-0.7, 0.25, -0.4), sunI: 2.2, fog: 0x8a6a5a, fogD: 0.014, clouds: 0.75 });
+  terrain(scene, { size: 300, h: gh, color: (x, z, hh, sl) => dryCol(x, z, hh, sl).lerp(C(0x5a4a38), 0.35) });
+  const st = stoneM(0xb0a088, [6, 2]);
+  const wl = wall(50, 9, 3, st); wl.position.set(0, 0, -20); wl.rotation.y = 0.12; scene.add(wl);
+  [[-10, -18.8], [9, -21]].forEach(([x, z]) => { const t = tower(3.2, 13, st, { roof: 0x5a2a20 }); t.position.set(x, 0, z); scene.add(t); });
+  const sgt = siegeTower(10); sgt.position.set(-3, gh(-3, -14), -14); sgt.rotation.y = 0.12; scene.add(sgt);
+  const rm = ram(); rm.position.set(4.5, gh(4.5, -13), -13); rm.rotation.y = 0.12; scene.add(rm);
+  const r = rng(4);
+  for (let i = 0; i < 14; i++) { const x = r.range(-7, 8), z = r.range(-11, -5); const f = figure({ faction: 'aube', variant: i % 4, coat: 0xd8d0bc, spear: i % 3 === 0, shield: i % 2 ? SH.aube : null, armRot: [[-20, 12], [-r.range(20, 80), 15]] }); f.position.set(x, gh(x, z), z); f.rotation.y = deg(180 + r.range(-20, 20)); scene.add(f); }
+  [[-6, -7], [3, -8]].forEach(([x, z]) => { const b = banner(0xe4ddca, 'sun', '#c99528', 5); b.position.set(x, gh(x, z), z); scene.add(b); });
+  fire(scene, V(7, 9.5, -20.5), 2.2, { light: 60 });
+  const dust = G(); puffs(dust, V(0, 0.5, -12), 26, 2, 0xb09070, 0.25); scene.add(dust);
+  fill(scene, 0xffb890, 1.2);
+  return shoot(scene, cam(40, V(2.5, 3.0, 7), V(0, 3.6, -15)), w, h);
+};
+S.conseil = (w, h) => {
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x1a1208, 0.05);
+  scene.add(new THREE.HemisphereLight(0x8a7050, 0x1a1008, 0.7));
+  const floor = mesh(new THREE.PlaneGeometry(30, 30), MAT.cloth({ color: 0x5a3a24, rep: [10, 10] })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const tg = new THREE.CylinderGeometry(7, 7, 6, 24, 1, true); const tm = MAT.cloth({ color: 0xb02a20, rep: [8, 3] }); tm.side = THREE.BackSide;
+  const tent = mesh(tg, tm); tent.position.set(0, 3, -4); scene.add(tent);
+  const roof = mesh(new THREE.ConeGeometry(7, 3, 24, 1, true), MAT.cloth({ color: 0xd8c8a0, rep: [8, 3] })); roof.material.side = THREE.BackSide; roof.position.set(0, 7.5, -4); scene.add(roof);
+  const table = mesh(new THREE.BoxGeometry(3, 0.1, 1.6), MAT.wood({ color: 0x4a2a18 })); table.position.set(0, 0.9, -4); scene.add(table);
+  for (const x of [-1.3, 1.3]) for (const z of [-0.6, 0.6]) { const l = mesh(new THREE.BoxGeometry(0.1, 0.9, 0.1), MAT.wood({ color: 0x3a2010 })); l.position.set(x, 0.45, -4 + z); scene.add(l); }
+  const map = mesh(new THREE.PlaneGeometry(2.2, 1.3), new THREE.MeshStandardMaterial({ map: mapTex(), roughness: 0.9 })); map.rotation.x = -Math.PI / 2; map.position.set(0, 0.96, -4); scene.add(map);
+  [[-0.6, -4.2, 0xc99528], [0.4, -3.8, 0x2f6a44], [0.7, -4.3, 0x3a5a8a], [-0.2, -3.7, 0xa02a20]].forEach(([x, z, c]) => { const p = mesh(new THREE.ConeGeometry(0.05, 0.16, 8), MAT.plain(c, 0.5)); p.position.set(x, 1.04, z); scene.add(p); });
+  [[-0.9, -4.5], [0.95, -3.6]].forEach(([x, z]) => { const cd = mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.25, 8), MAT.plain(0xe8e0c8)); cd.position.set(x, 1.08, z); scene.add(cd); const fl = mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: C(0xffc060).multiplyScalar(4) })); fl.position.set(x, 1.24, z); fl.scale.y = 1.8; scene.add(fl); const pl = new THREE.PointLight(0xffa050, 5, 8, 1.5); pl.position.set(x, 1.4, z); scene.add(pl); });
+  [[-2.0, -4.0, 90, 'aube', 0xe4ddca, 0x7a2a20], [0, -5.3, 0, 'aube', 0xa02a20, 0x3a2a20], [2.0, -4.2, -90, 'aube', 0xd8d0bc, 0x5a4a38], [-1.1, -5.2, 30, 'aube', 0x2a3a5a, 0x2a2a3a]].forEach(([x, z, ry, fa, co, cl], i) => { const f = figure({ faction: fa, variant: i, coat: co, cloakColor: cl, helm: false, beard: [1, 0.8, 0.5, 1][i], armRot: [[-30, 10], [-45, 10]] }); f.position.set(x, 0, z); f.rotation.y = deg(ry); scene.add(f); });
+  const b = banner(0xe4ddca, 'sun', '#c99528', 4); b.position.set(-3, 0, -8); scene.add(b);
+  const lamp = new THREE.PointLight(0xffb060, 18, 14, 1.4); lamp.position.set(0, 3.2, -3); lamp.castShadow = true; scene.add(lamp);
+  return shoot(scene, cam(46, V(2.2, 2.6, 0.6), V(-0.3, 0.9, -4.2)), w, h, { exposure: 1.2 });
+};
+S.ruines = (w, h) => {
+  const scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x0a0806, 0.06);
+  scene.add(new THREE.HemisphereLight(0x5a5048, 0x080606, 0.6));
+  { const sp = new THREE.SpotLight(0xd8c8a8, 80, 30, 0.35, 0.6, 1.2); sp.position.set(-3, 13, -5); sp.target.position.set(0, 2.2, -11); scene.add(sp, sp.target); }
+  const st = stoneM(0x8a8070, [8, 8]);
+  const floor = mesh(new THREE.PlaneGeometry(40, 40), st); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+  const back = mesh(new THREE.BoxGeometry(30, 10, 1), stoneM(0x6a6258, [8, 3])); back.position.set(0, 5, -13); scene.add(back);
+  for (let i = 0; i < 4; i++) for (const x of [-3.2, 3.2]) { const hh = i === 1 && x > 0 ? 2.2 : 6; const col = mesh(new THREE.CylinderGeometry(0.45, 0.5, hh, 14), st); col.position.set(x, hh / 2, -2 - i * 3); scene.add(col); }
+  scatter(scene, 18, (rr) => { const b = mesh(new THREE.BoxGeometry(rr.range(0.4, 1.2), rr.range(0.3, 0.7), rr.range(0.4, 1)), st); b.rotation.set(rr(), rr(), rr()); return b; }, (rr) => V(rr.range(-5, 5), 0.2, rr.range(-12, -3)), 8);
+  // statue d'un ancien roi
+  const stat = figure({ faction: 'aube', variant: 0, coat: 0x8a8478, legs: 0x8a8478, mail: false, helm: false, beard: 1, armRot: [[-10, 10], [-10, 10]] });
+  stat.traverse((o) => { if (o.isMesh) o.material = st; });
+  helmOn(stat, A.crownHelm({ m: st, crownM: st, gems: [0x8a8478, 0x8a8478], glow: 0 }), 0.045);
+  stat.scale.setScalar(2.2); stat.position.set(0, 0.4, -11); scene.add(stat);
+  const ped = mesh(new THREE.BoxGeometry(1.8, 0.8, 1.6), st); ped.position.set(0, 0.4, -11); scene.add(ped);
+  const ex = figure({ faction: 'aube', variant: 1, coat: 0x5a4a38, cloakColor: 0x3a2e24, helm: false, hood: 0x4a3a2a, armRot: [[-10, 12], [-110, 20]], beard: 0.6 });
+  ex.position.set(0.8, 0, -4.5); ex.rotation.y = deg(195); scene.add(ex);
+  const tor = G(); const st2 = mesh(new THREE.CylinderGeometry(0.03, 0.025, 0.5, 6), MAT.wood({ color: 0x3a2618 })); tor.add(st2); const fl = mesh(new THREE.ConeGeometry(0.08, 0.3, 8), new THREE.MeshBasicMaterial({ color: C(0xffa040).multiplyScalar(3), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); fl.position.y = 0.38; tor.add(fl); const pl = new THREE.PointLight(0xff9a40, 14, 12, 1.5); pl.position.y = 0.5; pl.castShadow = true; tor.add(pl); inHand(ex, tor, { rx: Math.PI, pos: [0, -0.05, 0] });
+  embers(scene, V(0.8, 2.2, -4.6), 20, 1.2, 0xffb040, 0.04);
+  return shoot(scene, cam(44, V(1.6, 1.8, 0.6), V(0, 1.6, -9)), w, h, { exposure: 1.3, bloom: { strength: 0.4 } });
+};
+
 export function register(job) {
   job('bg/title.jpg', 1920, 1080, () => S.title(1920, 1080), { div: 3, colors: 64, dither: 0.4 });
   job('bg/camp.jpg', 1920, 1080, () => S.camp(1920, 1080), { div: 3, colors: 56, dither: 0.4 });
-  for (const id of ['loup', 'brigand', 'deserteur', 'pillard', 'mercenaire', 'chevalier-noir', 'champion']) job(`enemies/${id}.jpg`, 512, 384, () => S[id](512, 384), { div: 2, colors: 48 });
-  for (const id of ['troupeaux', 'bucheron', 'pelerins', 'forge', 'remparts', 'caravane', 'eclaireur', 'recrues', 'brigands', 'ambassade']) job(`jobs/${id}.jpg`, 512, 320, () => S[id](512, 320), { div: 2, colors: 48 });
+  for (const id of ['loup', 'brigand', 'deserteur', 'pillard', 'mercenaire', 'chevalier-noir', 'champion', 'ours', 'chef-brigand', 'assassin', 'chevalier-renegat', 'fou-de-guerre', 'garde-du-tyran', 'seigneur-pillard', 'capitaine-mercenaire', 'seigneur-dechu', 'gardien-des-tombeaux', 'general-renegat', 'roi-sans-couronne', 'seigneur-des-ruines']) job(`enemies/${id}.jpg`, 512, 384, () => S[id](512, 384), { div: 2, colors: 48 });
+  for (const id of ['troupeaux', 'bucheron', 'pelerins', 'forge', 'remparts', 'caravane', 'eclaireur', 'recrues', 'brigands', 'ambassade', 'chantier', 'percepteur', 'frontiere', 'cavalerie', 'espion', 'convoi', 'maitre-d-armes', 'siege', 'conseil', 'ruines']) job(`jobs/${id}.jpg`, 512, 320, () => S[id](512, 320), { div: 2, colors: 48 });
   for (const id of ['patrouille', 'pillage', 'duel', 'bataille', 'travail', 'hopital']) job(`actions/${id}.jpg`, 800, 450, () => S[id](800, 450), { div: 2, colors: 56 });
 }

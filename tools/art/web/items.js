@@ -1,8 +1,9 @@
 // Objets d'inventaire (256x256, fond transparent) et écus de faction (512x512).
 import { THREE, MAT, canvasTex, img, tex, studio, shadowCatcher, mesh, V, deg, capture, displace, fbm, lathe, loft, ellipse, lerp, smooth, tubeAlong } from './lib.js';
 import * as M from './models.js';
+import { buildItems } from './arsenal.js';
 
-function fitAndShoot(obj, { w = 256, h = 256, ss = 3, pose = [0, 0, 0], view = [0.0, 0.32, 1], fov = 28, pad = 1.08, shadow = false, light = {}, exposure = 1.0, catcherOpacity = 0.4 } = {}) {
+export function fitAndShoot(obj, { w = 256, h = 256, ss = 3, pose = [0, 0, 0], view = [0.0, 0.32, 1], fov = 28, pad = 1.08, shadow = false, light = {}, exposure = 1.0, catcherOpacity = 0.4 } = {}) {
   const scene = new THREE.Scene();
   const holder = new THREE.Group(); holder.add(obj);
   obj.rotation.set(deg(pose[0]), deg(pose[1]), deg(pose[2]), 'YXZ');
@@ -68,6 +69,8 @@ export const ITEMS = {
   'chevaliere-d-or': () => fitAndShoot(M.ring({ type: 'signet' }), { pose: [-20, 20, 0], view: [0, 0.6, 1] }),
   'anneau-de-saphir': () => fitAndShoot(M.ring({ type: 'sapphire' }), { pose: [-20, 20, 0], view: [0, 0.5, 1], light: { env: 1.4 } }),
 };
+// objets du lot 2 (générateurs paramétriques de arsenal.js)
+Object.assign(ITEMS, buildItems(fitAndShoot));
 function pair(fn) { const g = new THREE.Group(); const a = fn(), b = fn(); a.position.x = -0.08; b.position.x = 0.09; b.position.z = 0.05; b.rotation.y = deg(-12); a.rotation.y = deg(6); g.add(a, b); return g; }
 function broigne() {
   const g = M.garment({ mat: MAT.leather({ color: 0x5a3820, rep: [3, 3] }), length: 0.85, sleeve: 0.35, flare: 0.6, wrinkle: 0.015 });
