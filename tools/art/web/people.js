@@ -1,4 +1,4 @@
-// Personnages : tête sculptée, barbe, bustes (portraits) et silhouettes complètes pour les scènes.
+// Personnages des scènes : tête sculptée, barbe et silhouettes complètes (les portraits sont dans portraits.js).
 import { THREE, MAT, mesh, displace, loft, lathe, ellipse, sweep, tubeAlong, canvasTex, tex, img, fbm, noise3, smooth, clamp, lerp, V, deg, rng, sun, capture } from './lib.js';
 import * as M from './models.js';
 
@@ -159,61 +159,8 @@ export function torso({ mat, len = 0.75, inflate = 0, wrinkle = 0.015, seed = 0,
   return g;
 }
 
-// ------------------------------------------------------------------ buste
+// ------------------------------------------------------------------ casques des silhouettes
 const HELM = { aube: [0x8c8a86, 0x9a9894, 0x7a7876, 0x8a8680], givre: [0x8a8c90, 0x6a6660, 0x9a9ca0, 0x7a7068] };
-const PAL = {
-  aube: { skin: [0xb88a70, 0xc49a80, 0xa87a62, 0xb48468], hair: [0x5a4030, 0x8a6a40, 0x3a2a20, 0x6a5040], surcoat: [0xe4ddca, 0xd8d0bc, 0xe8e2d4, 0xd0c8b0], beard: [0.3, 0.8, 0.0, 0.5] },
-  sables: { skin: [0x8a5e44, 0x9a6a4e, 0x7a5038, 0x946448], hair: [0x1a1410, 0x2a1e16, 0x14100c, 0x3a2a20], surcoat: [0x2f5a3a, 0xc8b48a, 0x3a6a44, 0xb8a070], beard: [0.9, 0.7, 0.0, 1.0] },
-  givre: { skin: [0xc49a84, 0xb88c74, 0xcca48c, 0xb08068], hair: [0x8a6a40, 0xc0a070, 0x4a3020, 0x9a948a], surcoat: [0x2a3a5a, 0x4a5466, 0x34445e, 0x5a6270], beard: [1.0, 1.6, 0.35, 1.3] },
-};
-export function bust(faction, variant) {
-  const p = PAL[faction];
-  const g = G();
-  const r = rng(variant * 31 + faction.length);
-  // tête
-  const head = G(); head.position.set(0, 1.66, 0.0);
-  const hg = headGeo({ jaw: 0.9 + r() * 0.3, nose: 0.85 + r() * 0.35, brow: 1, seed: variant });
-  head.add(mesh(hg, MAT.skin({ color: p.skin[variant] })));
-  head.add(eye(-1), eye(1));
-  const bl = p.beard[variant];
-  const hm = hairMat(p.hair[variant]);
-  if (bl > 0) { head.add(mesh(beardGeo({ len: 0.02 + bl * 0.07, full: 0.6 + bl * 0.6, seed: variant }), hm)); head.add(moustache(hm)); }
-  head.add(headGear(faction, variant));
-  if (faction === 'sables' && (variant === 1 || variant === 3)) {
-    // voile (litham) couvrant le bas du visage
-    const veil = M.aventail({ r: 0.1, len: 0.13, front: true, mat: MAT.cloth({ color: variant === 1 ? 0x2a2a2a : 0x3a5a3c, rep: [6, 3], sheen: 0.7 }) });
-    veil.children ? null : null; veil.position.y = -0.005; veil.scale.set(0.92, 1, 0.98); head.add(veil);
-  }
-  head.rotation.y = deg([-14, 10, -6, 16][variant]) + deg(variant % 2 ? -20 : 20);
-  head.scale.setScalar(1.07);
-  head.rotation.x = deg([3, -2, 5, 0][variant]);
-  g.add(head);
-  // cou
-  g.add(mesh(lathe([[0.055, 1.48], [0.05, 1.56], [0.052, 1.62]].map(([a, b]) => [a, b]), 24), MAT.skin({ color: p.skin[variant] })));
-  // corps
-  const body = G(); body.position.y = 1.45;
-  if (faction === 'aube') {
-    body.add(torso({ mat: M.mailMat(0x9e9e9c, [16, 16]), wrinkle: 0.02, seed: variant }));
-    const sc = torso({ mat: MAT.cloth({ color: p.surcoat[variant], rep: [6, 6], sheen: 0.5 }), inflate: 0.07, arms: false, wrinkle: 0.04, seed: variant + 3, len: 0.85 });
-    sc.position.y = -0.03; sc.scale.y = 1.0; body.add(sc);
-    const strap = mesh(sweep([V(-0.17, 0.0, 0.1), V(-0.05, -0.15, 0.15), V(0.08, -0.32, 0.15), V(0.18, -0.45, 0.09)], () => 0.004, () => 0.022, { side: V(0, 0, 1), steps: 40, n: 8 }), MAT.leather({ color: 0x3a2214 })); body.add(strap);
-    if (variant % 2 === 1) body.add(cloak(MAT.cloth({ color: [0x7a2a20, 0x5a4a34][variant >> 1], rep: [5, 5], sheen: 0.4 })));
-  } else if (faction === 'sables') {
-    body.add(torso({ mat: MAT.cloth({ color: p.surcoat[variant], rep: [6, 6], sheen: 0.8 }), wrinkle: 0.045, seed: variant }));
-    const mv = torso({ mat: M.mailMat(0x9a9890, [16, 10]), inflate: 0.05, arms: false, len: 0.35, wrinkle: 0.0 }); body.add(mv);
-    const sash = MAT.cloth({ color: [0xc8a050, 0x2f5a3a, 0xd8c8a0, 0x7a3020][variant], rep: [8, 2], sheen: 0.8 });
-    body.add(mesh(sweep([V(-0.19, 0.02, 0.06), V(-0.07, -0.13, 0.15), V(0.06, -0.3, 0.155), V(0.18, -0.46, 0.08)], () => 0.008, () => 0.045, { side: V(0, 0, 1), steps: 40, n: 10 }), sash));
-  } else {
-    body.add(torso({ mat: MAT.cloth({ color: p.surcoat[variant], rep: [6, 6], sheen: 0.6 }), wrinkle: 0.035, seed: variant }));
-    if (variant !== 2) body.add(torso({ mat: M.mailMat(0x9a9a98, [16, 14]), inflate: 0.045, arms: false, len: 0.55, wrinkle: 0.0 }));
-    body.add(cloak(MAT.cloth({ color: [0x3a3a40, 0x4a3a2a, 0x2a2a34, 0x3a3228][variant], rep: [5, 5], sheen: 0.4 })));
-    { const fm = MAT.fur({ color: [0x5a4a3a, 0x3a2e22, 0x6a5e50, 0x4a3c2e][variant], rep: [3, 1] }); fm.sheen = 0.35; fm.envMapIntensity = 0.3; body.add(furMantle(fm, variant)); }
-    const br = mesh(new THREE.TorusGeometry(0.025, 0.006, 10, 32), MAT.metal({ color: 0xc8c8cc, rough: 0.3 })); br.position.set(0.1, -0.1, 0.15); br.rotation.y = 0.3; body.add(br);
-  }
-  body.rotation.y = deg(variant % 2 ? -34 : 34);
-  g.add(body);
-  return g;
-}
 export function furMantle(mat, seed = 0) {
   // pèlerine de fourrure épousant les épaules, bord inférieur en mèches
   const secs = [];
@@ -240,50 +187,6 @@ export function cloak(mat) {
   }
   const g = loft(secs, { closed: false });
   return mesh(g, mat);
-}
-
-function portraitScene(faction, variant) {
-  const scene = new THREE.Scene();
-  const warm = variant % 2 === 0;
-  // fond : dégradé sombre avec halo et fumée
-  const bg = canvasTex(512, 640, (c, w, h) => {
-    const base = { aube: ['#2a2018', '#0c0806'], sables: ['#3a2410', '#0e0804'], givre: ['#18202c', '#06080c'] }[faction];
-    const gr = c.createRadialGradient(w * (0.3 + 0.4 * (variant % 2)), h * 0.35, 10, w * 0.5, h * 0.5, w * 0.95);
-    gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]); c.fillStyle = gr; c.fillRect(0, 0, w, h);
-    const d = c.getImageData(0, 0, w, h);
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const n = fbm(x / 90 + variant, y / 120, 3.3, 5); const i = (y * w + x) * 4; const k = 1 + n * 0.5; d.data[i] *= k; d.data[i + 1] *= k; d.data[i + 2] *= k; }
-    c.putImageData(d, 0, 0);
-  });
-  const bgm = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 5.25), new THREE.MeshBasicMaterial({ map: bg, toneMapped: false }));
-  bgm.position.set(0, 1.5, -2.5); scene.add(bgm);
-  const b = bust(faction, variant); scene.add(b);
-  // éclairage : clé latérale, contre-jour, débouchage faible
-  scene.environment = null;
-  const keyCol = faction === 'givre' ? (warm ? 0xffc890 : 0xa8c0ff) : (warm ? 0xffa860 : 0xffd0a0);
-  const side = variant % 2 ? -1 : 1;
-  sun(scene, { color: keyCol, intensity: 3.2, pos: V(side * 1.6, 3.0, 0.8), target: V(0, 1.6, 0), size: 0.8, radius: 3, mapSize: 2048 });
-  const rim = new THREE.DirectionalLight(faction === 'givre' ? 0x9ab8ff : warm ? 0xffa050 : 0xa0b4e0, 7); rim.position.set(-side * 1.4, 2.4, -1.8); scene.add(rim);
-  const rim2 = new THREE.SpotLight(faction === 'givre' ? 0xc0d4ff : 0xffd0a0, 4, 6, 0.5, 0.6); rim2.position.set(side * 1.2, 2.0, -1.4); rim2.target.position.set(0, 1.5, 0); scene.add(rim2, rim2.target);
-  const fill = new THREE.PointLight(warm ? 0xff7030 : 0x405070, 0.25, 4, 2); fill.position.set(-side * 0.8, 1.2, 1.2); scene.add(fill);
-  scene.add(new THREE.HemisphereLight(0x8090a8, 0x201810, 0.04));
-  // braises / poussières lumineuses en arrière-plan
-  const r = rng(variant * 7 + faction.length * 13);
-  const pg = new THREE.BufferGeometry(); const pp = [];
-  for (let i = 0; i < 60; i++) pp.push(r.range(-1.6, 1.6), r.range(0.6, 2.6), r.range(-2.2, -0.8));
-  pg.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3));
-  const spr = canvasTex(64, 64, (c, w, h) => { const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = gr; c.fillRect(0, 0, w, h); });
-  scene.add(new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.035, map: spr, color: faction === 'givre' ? 0x9ab8e0 : 0xffa050, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: faction === 'givre' ? 0.5 : 0.9 })));
-  // reflets métal : environnement studio atténué
-  return { scene, side };
-}
-import { studioEnv } from './lib.js';
-export function renderPortrait(faction, variant) {
-  const { scene } = portraitScene(faction, variant);
-  scene.environment = studioEnv();
-  scene.environmentIntensity = 0.18;
-  const cam = new THREE.PerspectiveCamera(26, 512 / 640, 0.05, 20);
-  cam.position.set(0.12 * (variant % 2 ? 1 : -1), 1.66, 1.68); cam.lookAt(0, 1.6, 0);
-  return capture({ scene, camera: cam, w: 512, h: 640, ss: 2, bloom: { strength: 0.35, radius: 0.5, threshold: 0.85 }, dof: { focus: 1.65, aperture: 0.004, maxblur: 0.008 }, grade: { vignette: 0.6, grain: 0.045, contrast: 1.1, sat: 0.9 }, exposure: 1.05 });
 }
 
 /** Silhouette complète (origine aux pieds, regarde vers +z). */
@@ -323,6 +226,5 @@ export function figure({ faction = 'aube', variant = 0, coat = null, legs = 0x5a
   return g;
 }
 
-export function register(job) {
-  for (const f of ['aube', 'sables', 'givre']) for (let v = 0; v < 4; v++) job(`portraits/${f}-${v + 1}.jpg`, 512, 640, () => renderPortrait(f, v), { div: 4, colors: 48, dither: 0.3 });
-}
+// Les portraits sont produits par portraits.js (humain MakeHuman + rendu peint).
+export function register() {}

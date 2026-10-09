@@ -17,7 +17,7 @@ Le style visé est une **illustration 2D façon « 128 px »** : à mi-chemin en
 |---|---|---|
 | objets `items/` | 128×128 | 256×256 (×2) |
 | écus `factions/` | 128×128 | 512×512 (×4) |
-| portraits | 128×160 | 512×640 (×4) |
+| portraits (rendu peint, voir plus bas) | 1024×1280 | 512×640 |
 | ennemis | 256×192 | 512×384 (×2) |
 | travaux `jobs/` | 256×160 | 512×320 (×2) |
 | actions | 400×225 | 800×450 (×2) |
@@ -46,12 +46,53 @@ Prérequis :
 
 ## Fichiers
 
-- `render.mjs` : serveur statique local + Chromium headless. Il exécute chaque « job » puis appelle `pixelize.py`.
+- `render.mjs` : serveur statique local + Chromium headless. Il exécute chaque « job » puis appelle `pixelize.py` (ou `paint.py` pour les portraits).
 - `web/lib.js` : moteur de rendu, bruit, matériaux PBR, outils de géométrie (loft, sweep, lathe), ciel, capture et passes de contours.
 - `web/models.js` : armes, boucliers (peinture usée, emblèmes dessinés : soleil, étoile à huit branches, corbeau, lion), casques, cottes, bottes, bagues.
-- `web/people.js` : têtes, barbes, bustes des portraits, silhouettes complètes.
+- `web/people.js` : têtes, barbes et silhouettes complètes des scènes.
+- `web/human.js`, `web/hair.js`, `web/gear.js`, `web/portraits.js`, `paint.py`, `mh_import.py`, `portraits_sheet.py`, `assets/mh/` : portraits réalistes (section suivante).
 - `web/items.js` : objets et écus. `web/scenes.js` : fonds, ennemis, travaux, actions.
 - `pixelize.py` : style illustré. `map.py` : carte. `textures.py` : textures. `logo.py` : logo et icônes. `preview.mjs` : planche contact.
 - `tex/` et `.tmp/` : fichiers intermédiaires régénérés à chaque lancement.
+
+## Portraits réalistes (`portraits/*.jpg`)
+
+Les 12 portraits (buste de trois quarts, 512×640) ne sont plus des têtes en primitives : ils partent d'un **vrai maillage humain**.
+
+1. **Maillage de base MakeHuman (CC0)** : `mh_import.py` lit le maillage « hm08 » de MakeHuman, ~140 cibles de morphose
+   (sexe, âge, origine, musculature, corpulence, nez, menton, bouche, yeux, joues, front, cou…) et les yeux « high-poly »
+   avec leur texture d'iris. Il n'en garde que le haut du corps et écrit une version compacte dans `assets/mh/`
+   (`mh.bin` ≈ 1,8 Mo, `mh.json`, `eye.jpg`). Ces fichiers sont versionnés : pas besoin de réseau pour rendre.
+   Pour les régénérer : `python3 tools/art/mh_import.py` (télécharge depuis GitHub, commit figé) ou
+   `python3 tools/art/mh_import.py chemin/vers/makehuman/makehuman/data`.
+2. **`web/human.js`** : morphose (mélange des cibles comme MakeHuman), bras abaissés, rotation de la tête, régions du
+   visage (lèvres, joues, orbites, zone de barbe, sourcils, cuir chevelu) définies sur la topologie, peau peinte par
+   sommet (teint, rougeurs, lèvres, barbe naissante, taches de rousseur, hâle, cicatrice), occlusion par courbure,
+   éclairage « wrap » imitant la diffusion sous la peau, rugosité variable (zone T brillante), yeux avec cornée.
+3. **`web/hair.js`** : poils et cheveux en dizaines de milliers de mèches (lignes) qui poussent depuis la peau, évitent
+   le visage, se regroupent en touffes ; ombrage Kajiya-Kay avec les ombres portées de la scène. Barbes, sourcils,
+   cils, chevelures, tresses, fourrures.
+4. **`web/gear.js`** : l'équipement est **ajusté au corps** : coiffes de mailles, cottes, surcots, gambisons, kaftans,
+   lamelles, foulards, capes et mantelets sont des coques tirées de la topologie du corps (décalées, lissées, bords
+   ourlés) ; mailles et tissus en projection triplanaire. Casques mesurés sur le crâne (conique à nasal, bulbe
+   enturbanné à pointe, calotte à lunettes), turban, broches à emblème (soleil, étoile à huit branches, corbeau).
+5. **`web/portraits.js`** : les 12 fiches (visage, peau, yeux, pilosité, équipement, pose), éclairage trois points
+   (clé chaude ou froide selon la faction, contre-jour, débouchage) et environnement de reflets dédié.
+6. **`paint.py`** : rendu 1024×1280 → filtre de Kuwahara **anisotrope** (touches qui suivent les formes), réduction à
+   512×640, traits de contour fins et chauds, palette légèrement resserrée, grain de toile. numpy + Pillow seulement.
+
+```sh
+node tools/art/render.mjs portraits/        # les 12 portraits (≈ 6 à 8 min) ; ou portraits/givre-3
+node tools/art/render.mjs _close/aube-2     # gros plan brut de contrôle dans tools/art/.tmp/
+python3 tools/art/portraits_sheet.py planche.png 1600   # planche contact des 12 portraits
+```
+
+### Ressource tierce
+
+- **MakeHuman** — maillage de base hm08, cibles de morphose, yeux high-poly et texture `brown_eye.png`.
+  Source : <https://github.com/makehumancommunity/makehuman> (commit `a8bc2d54ff0ac92e78ff71431b1023eda42bf482`,
+  dossier `makehuman/data/`). Licence des ressources : **CC0 1.0 Universal** (voir `LICENSE.md` du dépôt : « The base
+  mesh and proxies, targets and modifiers, textures… have been released under CC0 1.0 Universal ») ; aucune
+  attribution requise, mention conservée par courtoisie. Le code AGPL de MakeHuman n'est **pas** utilisé.
 
 Les factions sont fictives : aucun symbole religieux réel (ni croix, ni croissant, ni marteau de Thor).

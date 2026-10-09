@@ -52,8 +52,14 @@ for (const job of todo) {
   const res = JSON.parse(await page.evaluate((id) => window.renderJob(id), job.out));
   const base = path.join(TMP, job.out.replace(/[/.]/g, '_'));
   for (const k of ['color', 'normal', 'depth']) fs.writeFileSync(`${base}_${k}.png`, Buffer.from(res[k].split(',')[1], 'base64'));
+  if (job.post === 'raw') { console.log(`  ${base}_color.png  ${((Date.now() - t0) / 1000).toFixed(1)}s`); continue; }
   const out = path.join(ASSETS, job.out);
   fs.mkdirSync(path.dirname(out), { recursive: true });
+  if (job.post === 'paint') {
+    execFileSync('python3', [path.join(HERE, 'paint.py'), base, out, String(job.w), String(job.h), ...(job.paint || [])], { stdio: 'inherit' });
+    console.log(`  ${job.out}  ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+    continue;
+  }
   execFileSync('python3', [path.join(HERE, 'pixelize.py'), base, out, String(job.w), String(job.h), String(job.div || 2),
     '--colors', String(job.colors || 48), '--dither', String(job.dither ?? 0.35), '--edge', String(job.edge ?? 1), '--quality', String(job.quality || 92), '--sat', String(job.sat ?? 1.12)], { stdio: 'inherit' });
   console.log(`  ${job.out}  ${((Date.now() - t0) / 1000).toFixed(1)}s`);
