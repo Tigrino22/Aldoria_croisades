@@ -207,6 +207,19 @@ lit = shade(hgt * 3, 2.5)
 wood = wood * (0.7 + 0.4 * lit[..., None])
 save_rgb(wood, os.path.join(UI, 'wood.jpg'))
 
+# ---- style « pixel illustré » : chaque texture UI est redessinée à 256 px (palette 32 couleurs) puis x4
+def pixelize_ui(name, colors=32):
+    p = os.path.join(UI, name + '.jpg')
+    im = Image.open(p).convert('RGB').resize((256, 256), Image.BOX)
+    a = np.asarray(im, dtype=np.float64)
+    bayer = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]) / 16 - 0.5
+    a = np.clip(a + np.tile(bayer, (64, 64))[..., None] * 8, 0, 255)
+    im = Image.fromarray(a.astype(np.uint8))
+    q = im.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE).convert('RGB')
+    q.resize((1024, 1024), Image.NEAREST).save(p, quality=92, subsampling=0, optimize=True)
+for nm in ('parchment', 'stone', 'leather', 'wood'):
+    pixelize_ui(nm)
+
 # ============================================================ bibliothèque pour three.js
 print('bibliothèque 3D')
 M = 512

@@ -370,14 +370,34 @@ img = mix(sea, landrgb, land)
 clouds = smoothstep(0.12, 0.35, fbm(W, H, 220, 7, 0.55, seed=81))
 cloud_sh = np.roll(np.roll(clouds, 14, 0), 18, 1)
 sea_only = 1 - blur(land, 25)
-img = img * (1 - 0.15 * (cloud_sh * sea_only)[..., None])
-img = mix(img, col('f4f6f8'), clouds * sea_only * 0.35)
+pass
+pass  # pas de nuages (lisibilité de la côte)
 vig = 1 - 0.35 * (((xx / W - 0.5) ** 2 + (yy / H - 0.5) ** 2) * 2.2)
 img = img * vig[..., None]
 img = np.clip(img, 0, 1) ** (1 / 1.05)
 
-out = Image.fromarray((img * 255).astype(np.uint8))
-out = out.filter(ImageFilter.UnsharpMask(1.2, 60, 2))
-out.save(os.path.join(OUT, 'aldoria.jpg'), quality=86, optimize=True, progressive=True)
-out.resize((800, 600), Image.LANCZOS).save(os.path.join(OUT, 'aldoria-small.jpg'), quality=84, optimize=True)
+# ---------------------------------------------------------------- style illustré « 128 px »
+# On dessine à 800x600 (moyenne), palette limitée avec léger tramage, trait de côte sombre,
+# puis agrandissement x2 au plus proche voisin.
+print('style pixel...')
+full = Image.fromarray((np.clip(img, 0, 1) * 255).astype(np.uint8))
+aw, ah = 800, 600
+small = np.asarray(full.resize((aw, ah), Image.BOX), dtype=np.float64)
+bayer = np.array([[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]) / 16 - 0.5
+small = np.clip(small + np.tile(bayer, (ah // 4, aw // 4))[..., None] * 10, 0, 255)
+sm = Image.fromarray(small.astype(np.uint8)).filter(ImageFilter.MedianFilter(3))
+pal = sm.quantize(colors=40, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+q = np.asarray(sm.quantize(palette=pal, dither=Image.Dither.NONE).convert('RGB').filter(ImageFilter.ModeFilter(3)), dtype=np.float64)
+lm = np.asarray(Image.fromarray((land * 255).astype(np.uint8)).resize((aw, ah), Image.BOX), dtype=np.float64) / 255 > 0.5
+edge = np.zeros_like(lm)
+for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+    edge |= lm & ~np.roll(np.roll(lm, dy, 0), dx, 1)
+q[edge] = q[edge] * 0.35 + np.array([30, 24, 16]) * 0.65
+outer = np.zeros_like(lm)
+for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+    outer |= ~lm & np.roll(np.roll(lm, dy, 0), dx, 1)
+q[outer] = q[outer] * 0.6 + np.array([210, 225, 220]) * 0.4
+px = Image.fromarray(q.astype(np.uint8))
+px.resize((W, H), Image.NEAREST).save(os.path.join(OUT, 'aldoria.jpg'), quality=92, subsampling=0, optimize=True)
+px.save(os.path.join(OUT, 'aldoria-small.jpg'), quality=92, subsampling=0, optimize=True)
 print('ok', OUT)
