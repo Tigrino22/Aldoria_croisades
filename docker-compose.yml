@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aldoria
+      POSTGRES_PASSWORD: aldoria
+      POSTGRES_DB: aldoria
+    # Port 5433 pour pouvoir lancer Aldoria War (5432) en même temps
+    ports:
+      - "5433:5432"
+    volumes:
+      - aldoria-croisades-db:/var/lib/postgresql/data
+volumes:
+  aldoria-croisades-db:
