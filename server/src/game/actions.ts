@@ -13,7 +13,9 @@ import {
   WORK_DURATIONS,
   duel,
   emptySkills,
+  duelXp,
   exposedGold,
+  pillageXp,
   honorChange,
   hospitalCost,
   isOutlaw,
@@ -234,14 +236,14 @@ async function resolvePillage(c: Db, playerId: number, targetId: number, now: Da
       playerId,
       loot + bounty,
     ]);
-    await grant(c, playerId, { xp: 10 + def.row.level * 4, gold: loot + bounty, honor: honor.attacker }, outbox);
-    await grant(c, targetId, { xp: 2, honor: honor.defender }, outbox);
+    await grant(c, playerId, { xp: pillageXp.win(def.row.level), gold: loot + bounty, honor: honor.attacker }, outbox);
+    await grant(c, targetId, { xp: pillageXp.defenderLoss, honor: honor.defender }, outbox);
   } else {
     lost = Math.floor(exposedGold(att.row.gold, att.row.level) * PILLAGE_DEFEAT_SHARE);
     await c.query('UPDATE characters SET losses = losses + 1 WHERE player_id = $1', [playerId]);
     await c.query('UPDATE characters SET wins = wins + 1 WHERE player_id = $1', [targetId]);
-    await grant(c, playerId, { xp: 3 + def.row.level, gold: -lost, honor: honor.attacker }, outbox);
-    await grant(c, targetId, { xp: 5 + att.row.level * 2, gold: lost, honor: honor.defender }, outbox);
+    await grant(c, playerId, { xp: pillageXp.loss(def.row.level), gold: -lost, honor: honor.attacker }, outbox);
+    await grant(c, targetId, { xp: pillageXp.defenderWin(att.row.level), gold: lost, honor: honor.defender }, outbox);
   }
   const log = combatLog(res, fa, fd);
   const common = { kind: 'pillage', combat: log, loot, bounty, lost, honor };
@@ -278,8 +280,8 @@ export async function fightDuel(c: Db, playerId: number, targetId: number, now: 
   await c.query(`UPDATE characters SET ${won ? 'wins = wins + 1' : 'losses = losses + 1'} WHERE player_id = $1`, [playerId]);
   await c.query(`UPDATE characters SET ${won ? 'losses = losses + 1' : 'wins = wins + 1'} WHERE player_id = $1`, [targetId]);
   const bounty = won && isOutlaw(def.row.honor) ? def.row.level * OUTLAW_BOUNTY_PER_LEVEL : 0;
-  await grant(c, playerId, { xp: won ? 8 + def.row.level * 3 : 2 + def.row.level, gold: bounty, honor: honor.attacker }, outbox);
-  await grant(c, targetId, { xp: won ? 2 : 4 + att.row.level * 2, honor: honor.defender }, outbox);
+  await grant(c, playerId, { xp: won ? duelXp.win(def.row.level) : duelXp.loss(def.row.level), gold: bounty, honor: honor.attacker }, outbox);
+  await grant(c, targetId, { xp: won ? duelXp.defenderLoss : duelXp.defenderWin(att.row.level), honor: honor.defender }, outbox);
   const log = combatLog(res, fa, fd);
   const data = { kind: 'duel', combat: log, bounty, honor };
   const reportId = await addReport(c, playerId, 'duel', won ? `Duel gagné contre ${def.row.name}` : `Duel perdu contre ${def.row.name}`, { ...data, side: 'a' }, outbox);

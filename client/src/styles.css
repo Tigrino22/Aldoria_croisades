@@ -1515,3 +1515,13 @@ small {
     grid-template-columns: 1fr;
   }
 }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--gold, #d8b453);
+  text-decoration: underline;
+  padding: 8px 0;
+  margin-top: 8px;
+  cursor: pointer;
+}

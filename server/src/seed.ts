@@ -34,7 +34,7 @@ await tx(async (c) => {
     for (const [i, name] of NAMES[faction].entries()) {
       const exists = await c.query('SELECT 1 FROM players WHERE lower(username) = lower($1)', [name]);
       if (exists.rows.length) continue;
-      const level = 1 + ((i * 3 + faction.length) % 12);
+      const level = 1 + ((i * 11 + faction.length * 3) % 45);
       const { rows } = await c.query('INSERT INTO players (username, password_hash) VALUES ($1, $2) RETURNING id', [name, hash]);
       const id = rows[0].id;
       const attributes = { force: 1 + (level >> 2), agilite: 1 + (level >> 2), vigueur: 1 + (level >> 2), esprit: 1 + (level >> 3) };

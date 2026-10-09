@@ -9,6 +9,7 @@ export default function ShopPage() {
   const [items, setItems] = useState<(ItemInfo & { finalPrice: number })[]>([]);
   const [factor, setFactor] = useState(1);
   const [slot, setSlot] = useState<Slot | 'vendre'>('arme');
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     api('/api/shop')
@@ -34,7 +35,7 @@ export default function ShopPage() {
         {slot !== 'vendre' && (
           <div className="shop-grid">
             {items
-              .filter((i) => i.slot === slot)
+              .filter((i) => i.slot === slot && (showAll || (i.level <= me.level + 10 && i.level >= me.level - 25)))
               .sort((a, b) => a.level - b.level)
               .map((i) => (
                 <article key={i.id} className={`shop-item ${i.level > me.level ? 'locked' : ''}`}>
@@ -57,6 +58,11 @@ export default function ShopPage() {
                 </article>
               ))}
           </div>
+        )}
+        {slot !== 'vendre' && (
+          <button className="btn btn-link" onClick={() => setShowAll(!showAll)}>
+            {showAll ? 'Seulement les objets de mon niveau' : 'Voir tout le catalogue'}
+          </button>
         )}
         {slot === 'vendre' && (
           <div className="shop-grid">

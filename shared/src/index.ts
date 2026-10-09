@@ -1,6 +1,7 @@
 export * from './config';
 export * from './rng';
 export * from './formulas';
+export * from './balance';
 export * from './combat';
 export * from './honor';
 export * from './types';

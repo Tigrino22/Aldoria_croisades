@@ -11,8 +11,16 @@ import { ITEMS, type ItemInfo, type Slot } from './data/items';
 import type { JobInfo } from './data/jobs';
 import { SKILLS, SKILL_INFO, emptySkills, type AttributeSet, type Skill, type SkillSet } from './data/skills';
 
-/** Expérience nécessaire pour passer du niveau `level` au suivant. */
-export const xpToNext = (level: number) => (level >= MAX_LEVEL ? Infinity : Math.round(40 * level ** 1.6));
+/**
+ * Expérience nécessaire pour passer du niveau `level` au suivant.
+ * Courbe quadratique : les gains par jour grandissent à peu près linéairement avec le niveau,
+ * donc le temps passé à chaque niveau grandit lui aussi (voir le rapport d'équilibrage, tools/balance.ts).
+ */
+export const xpToNext = (level: number) => (level >= MAX_LEVEL ? Infinity : xpCurve(level));
+const xpCurve = (level: number) => {
+  const raw = 20 + 2.6 * level ** 2;
+  return raw < 100 ? Math.round(raw) : Math.round(raw / 10) * 10;
+};
 
 /** Applique l'expérience gagnée : renvoie le nouveau niveau, l'expérience restante et le nombre de niveaux gagnés. */
 export function addXp(level: number, xp: number, gained: number) {
@@ -46,7 +54,7 @@ export function effectiveSkills(attributes: AttributeSet, skills: SkillSet, equi
   return out;
 }
 
-export const hpMax = (level: number, attributes: AttributeSet, eff: SkillSet) => 60 + level * 6 + attributes.vigueur * 8 + eff.resistance * 6;
+export const hpMax = (level: number, attributes: AttributeSet, eff: SkillSet) => 30 + level * 7 + attributes.vigueur * 5 + eff.resistance * 3;
 
 /** Pourcentage des PV max regagnés par heure de jeu. */
 export const hpRegenPerHour = (eff: SkillSet) => 0.08 + eff.recuperation * 0.004;
@@ -75,7 +83,7 @@ export const exposedGold = (gold: number, level: number) => Math.max(0, gold - s
 
 export function factionRank(faction: Faction, level: number) {
   const ranks = FACTION_INFO[faction].ranks;
-  return ranks[Math.min(ranks.length - 1, Math.floor(level / 7))]!;
+  return ranks[Math.min(ranks.length - 1, Math.floor(level / 15))]!;
 }
 
 export function honorTitle(honor: number) {
@@ -115,4 +123,4 @@ export function workReward(job: JobInfo, eff: SkillSet, minutes: number, ownedTe
 }
 
 /** Soins à l'hôpital : 1 pièce d'or par PV manquant, un peu plus cher avec le niveau. */
-export const hospitalCost = (missingHp: number, level: number) => Math.ceil(missingHp * (1 + level / 10));
+export const hospitalCost = (missingHp: number, level: number) => Math.ceil(missingHp * (1 + level / 40));

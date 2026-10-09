@@ -1,4 +1,6 @@
 import {
+  battleGold,
+  battleXp,
   BATTLE_HONOR,
   FACTION_INFO,
   TERRITORIES,
@@ -96,7 +98,7 @@ export async function resolveBattles(c: Db, now: Date, outbox: Outbox) {
         const isBest = String(f.id) === best;
         const honor = BATTLE_HONOR.participation + (victorious ? BATTLE_HONOR.victory : 0) + (isBest ? BATTLE_HONOR.bestFighter : 0);
         await c.query('UPDATE characters SET battles = battles + 1 WHERE player_id = $1', [id]);
-        await grant(c, id, { xp: 20 + f.level * 3, gold: victorious ? 50 + f.level * 10 : 0, honor }, outbox);
+        await grant(c, id, { xp: battleXp(f.level), gold: victorious ? battleGold(f.level) : 0, honor }, outbox);
         const title = victorious
           ? newOwner !== owner
             ? `Victoire ! ${tName} tombe aux mains de ${FACTION_INFO[team.faction].name}`

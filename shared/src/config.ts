@@ -1,5 +1,5 @@
 /** Réglages d'équilibrage. Toutes les durées sont en temps de jeu : le serveur les divise par la vitesse du monde. */
-export const MAX_LEVEL = 50;
+export const MAX_LEVEL = 100;
 export const ENERGY_MAX = 10;
 /** Minutes pour regagner 1 point d'énergie. */
 export const ENERGY_REGEN_MINUTES = 72;
@@ -46,4 +46,4 @@ export const SELL_RATIO = 0.4;
 /** Nombre de portraits par faction. */
 export const PORTRAITS_PER_FACTION = 4;
 /** Nombre maximal de rounds dans un duel. */
-export const MAX_ROUNDS = 10;
+export const MAX_ROUNDS = 12;

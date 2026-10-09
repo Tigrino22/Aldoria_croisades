@@ -31,7 +31,7 @@ export function ratings(role: Role, eff: SkillSet, armor: number, faction?: Fact
       hit: eff.precision + eff.charge * 0.5 + eff.intimidation * 0.5,
       dodge: eff.esquive + eff.embuscade * 0.5,
       initiative: eff.embuscade + eff.precision * 0.25,
-      damageMult: 1 + eff.arme * 0.05 + eff.charge * 0.02,
+      damageMult: 1 + eff.arme * 0.01 + eff.charge * 0.005,
       armor: armor + eff.endurance * 0.3,
     };
   } else if (role === 'defense') {
@@ -39,7 +39,7 @@ export function ratings(role: Role, eff: SkillSet, armor: number, faction?: Fact
       hit: eff.precision + eff.tactique * 0.5 + eff.fortification * 0.5,
       dodge: eff.esquive * 0.5 + eff.fortification + eff.tactique * 0.5,
       initiative: eff.tactique + eff.precision * 0.25,
-      damageMult: 1 + eff.arme * 0.05,
+      damageMult: 1 + eff.arme * 0.01,
       armor: armor + eff.endurance * 0.3 + eff.fortification * 0.3,
     };
   } else {
@@ -47,7 +47,7 @@ export function ratings(role: Role, eff: SkillSet, armor: number, faction?: Fact
       hit: eff.precision + eff.commandement * 0.5 + eff.tactique * 0.5,
       dodge: eff.esquive * 0.5 + eff.fortification * 0.5 + eff.commandement * 0.5,
       initiative: eff.tactique + eff.commandement * 0.5,
-      damageMult: 1 + eff.arme * 0.05 + eff.commandement * 0.02,
+      damageMult: 1 + eff.arme * 0.01 + eff.commandement * 0.005,
       armor: armor + eff.endurance * 0.3,
     };
   }
@@ -89,6 +89,15 @@ export interface DuelResult {
   damageB: number;
 }
 
+/**
+ * Part des dégâts qui traverse la protection. Elle dépend du niveau de l'attaquant :
+ * à niveau égal, une tenue normale arrête toujours environ 40 % des dégâts, du niveau 1 au niveau 100.
+ */
+export const armorFactor = (armor: number, attackerLevel: number) => {
+  const k = 10 + 1.2 * attackerLevel;
+  return k / (k + Math.max(0, armor));
+};
+
 export function hitChance(hit: number, dodge: number) {
   return Math.min(0.92, Math.max(0.1, (hit + 5) / (hit + dodge + 10)));
 }
@@ -97,7 +106,7 @@ function strike(att: Fighter, def: Fighter, r: Rng) {
   if (!r.chance(hitChance(att.ratings.hit, def.ratings.dodge))) return { hit: false, crit: false, damage: 0 };
   const crit = r.chance(0.06 + Math.min(0.1, att.ratings.hit * 0.001));
   const raw = r.int(att.damage[0], att.damage[1]) * att.ratings.damageMult * (crit ? 1.6 : 1);
-  const damage = Math.max(1, Math.round(raw * (100 / (100 + def.ratings.armor * 4))));
+  const damage = Math.max(1, Math.round(raw * armorFactor(def.ratings.armor, att.level)));
   return { hit: true, crit, damage };
 }
 

@@ -17,6 +17,7 @@ export default function ActionsPage() {
   const [data, setData] = useState<JobsResponse | null>(null);
   const [tab, setTab] = useState<'travail' | 'patrouille'>('travail');
   const [duration, setDuration] = useState(60);
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     api<JobsResponse>('/api/jobs').then(setData).catch(() => undefined);
@@ -27,6 +28,17 @@ export default function ActionsPage() {
   const busy = !!me.action;
   const missing = me.hpMax - me.hp;
   const durIndex = data.durations.indexOf(duration);
+  // Par défaut, on ne montre que ce qui est accessible et les quelques étapes suivantes.
+  const lockedJobs = data.jobs.filter((j) => !j.available);
+  const jobs = showAll ? data.jobs : [...data.jobs.filter((j) => j.available), ...lockedJobs.slice(0, 2)];
+  const lockedEnemies = data.enemies.filter((e) => !e.available);
+  const enemies = showAll ? data.enemies : [...data.enemies.filter((e) => e.available), ...lockedEnemies.slice(0, 2)];
+  const hidden = tab === 'travail' ? data.jobs.length - jobs.length : data.enemies.length - enemies.length;
+  const moreButton = (hidden > 0 || showAll) && (
+    <button className="btn btn-link" onClick={() => setShowAll(!showAll)}>
+      {showAll ? 'Masquer ce qui est hors de portée' : `Voir la suite (${hidden} de plus)`}
+    </button>
+  );
 
   return (
     <div className="page">
@@ -78,7 +90,7 @@ export default function ActionsPage() {
             </div>
           </div>
           <div className="cards">
-            {data.jobs.map((j) => {
+            {jobs.map((j) => {
               const r = j.rewards[durIndex]!;
               return (
                 <article key={j.id} className={`card job ${j.available ? '' : 'locked'}`}>
@@ -104,6 +116,7 @@ export default function ActionsPage() {
               );
             })}
           </div>
+          {moreButton}
         </Panel>
       )}
 
@@ -114,7 +127,7 @@ export default function ActionsPage() {
             d'attaque. Les ennemis laissent parfois tomber de l'équipement.
           </p>
           <div className="cards">
-            {data.enemies.map((e) => (
+            {enemies.map((e) => (
               <article key={e.id} className={`card enemy ${e.available ? '' : 'locked'}`}>
                 <Img src={art.enemy(e.id)} alt="" className="card-img" />
                 <div className="card-body">
@@ -137,6 +150,7 @@ export default function ActionsPage() {
               </article>
             ))}
           </div>
+          {moreButton}
         </Panel>
       )}
     </div>

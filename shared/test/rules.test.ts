@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ENEMIES,
   ENERGY_MAX,
   ITEMS,
+  ITEM_LIST,
   JOBS,
+  MAX_LEVEL,
+  SLOTS,
   TERRITORIES,
   addXp,
   battle,
@@ -27,15 +31,25 @@ function fighter(id: string, level: number, skill: number): Fighter {
 }
 
 describe('progression', () => {
+  it('suit une courbe croissante jusqu’au niveau 100', () => {
+    for (let l = 2; l < MAX_LEVEL; l++) expect(xpToNext(l)).toBeGreaterThan(xpToNext(l - 1));
+    expect(xpToNext(MAX_LEVEL)).toBe(Infinity);
+    const max = addXp(MAX_LEVEL - 1, 0, 10 ** 9);
+    expect(max.level).toBe(MAX_LEVEL);
+    expect(max.xp).toBe(0);
+  });
+
   it('monte de niveau et garde le surplus d’expérience', () => {
     const r = addXp(1, 0, xpToNext(1) + 5);
     expect(r).toEqual({ level: 2, xp: 5, levelsGained: 1 });
   });
 
   it('additionne compétence, attribut et équipement', () => {
-    const eff = effectiveSkills({ ...attrs, agilite: 3 }, { ...emptySkills(), precision: 2 }, { arme: 'lance' });
-    expect(eff.precision).toBe(2 + 3 + 1);
-    expect(eff.fortification).toBe(1 + 1);
+    const eff = effectiveSkills({ ...attrs, agilite: 3 }, { ...emptySkills(), precision: 2 }, { arme: 'epee-normande' });
+    const bonus = ITEMS['epee-normande']!.bonuses;
+    expect(eff.precision).toBe(2 + 3 + (bonus.precision ?? 0));
+    expect(eff.arme).toBe(1 + (bonus.arme ?? 0));
+    expect(bonus.arme).toBeGreaterThan(0);
   });
 
   it("calcule l'énergie à la lecture, plafonnée", () => {
@@ -117,5 +131,26 @@ describe('données', () => {
   it('a des voisinages symétriques et des objets cohérents', () => {
     for (const t of Object.values(TERRITORIES)) for (const n of t.neighbors) expect(TERRITORIES[n]!.neighbors).toContain(t.id);
     for (const i of Object.values(ITEMS)) expect(i.slot === 'arme' ? i.damage : true).toBeTruthy();
+    expect(ITEM_LIST.length).toBe(Object.keys(ITEMS).length);
+  });
+
+  it("propose de l'équipement à tous les niveaux, jusqu'au niveau 100", () => {
+    for (const slot of SLOTS) {
+      expect(Math.max(...ITEM_LIST.filter((i) => i.slot === slot).map((i) => i.level))).toBe(MAX_LEVEL);
+      // En boutique, jamais plus de 15 niveaux sans nouvel objet dans un emplacement.
+      const levels = ITEM_LIST.filter((i) => i.slot === slot && !i.dropOnly).map((i) => i.level);
+      expect(Math.max(...levels)).toBeGreaterThanOrEqual(MAX_LEVEL - 10);
+      const sorted = [...new Set(levels)].sort((a, b) => a - b);
+      for (let k = 1; k < sorted.length; k++) expect(sorted[k]! - sorted[k - 1]!).toBeLessThanOrEqual(15);
+    }
+  });
+
+  it('fait grandir objets, ennemis et travaux avec le niveau', () => {
+    const swords = ITEM_LIST.filter((i) => i.slot === 'arme' && i.rarity === 'rare').sort((a, b) => a.level - b.level);
+    const avg = (d: [number, number]) => d[0] + d[1];
+    for (let k = 1; k < swords.length; k++) if (swords[k]!.level > swords[k - 1]!.level) expect(avg(swords[k]!.damage!)).toBeGreaterThan(avg(swords[k - 1]!.damage!) * 0.95);
+    for (let k = 1; k < ENEMIES.length; k++) expect(ENEMIES[k]!.xp).toBeGreaterThan(ENEMIES[k - 1]!.xp);
+    for (const e of ENEMIES) for (const d of e.drops) expect(ITEMS[d.item], d.item).toBeDefined();
+    expect(ENEMIES.at(-1)!.level).toBe(MAX_LEVEL);
   });
 });
